@@ -1,0 +1,149 @@
+Loading data...
+================================================================================
+           AUCTION EMPIRICS: SECOND-HIGHEST BID ANALYSIS
+================================================================================
+Dataset: 68,120 observations
+Explanatory variables: ['bps_abs_price_change', 'base_fee_gwei', 'constant']
+Starting optimization...
+
+================================================================================
+                    PARAMETER ESTIMATES
+================================================================================
+
+INTEGRATED BUILDERS (Type 1):
+   μ parameters: ['0.0646', '0.0143', '-3.4444']
+   ω parameters: ['-0.0120', '-0.3913', '0.4734']
+   σ parameters: ['0.0311', '0.0048', '-0.9652']
+
+NEUTRAL BUILDERS (Type 2):
+   μ parameters: ['0.0402', '0.0160', '-3.8956']
+   ω parameters: ['0.0357', '-0.9673', '0.7140']
+   σ parameters: ['0.0197', '-0.0236', '-0.1481']
+
+================================================================================
+                         R² RESULTS
+================================================================================
+
+INTEGRATED BUILDERS (Type 1):
+   Stage 1 R²: 0.2129
+   Stage 2 R²: 0.0060
+   Overall R²: 0.1094
+
+NEUTRAL BUILDERS (Type 2):
+   Stage 1 R²: 0.1134
+   Stage 2 R²: -0.0164
+   Overall R²: 0.0485
+================================================================================
+
+================================================================================
+                 RANDOM BLOCK DISTRIBUTION ANALYSIS
+================================================================================
+
+Random Block Details:
+   Block Number: 21,131,351
+   Slot: 10,342,094
+
+Block Characteristics:
+ base_fee_gwei  bps_abs_price_change  winning_bid_amount  2nd_highest_bid_type_1_log  2nd_highest_bid_type_2_log
+     22.543174              0.891416            0.062007                    -2.80201                   -2.784894
+
+INTEGRATED BUILDERS (Type 1) Distribution:
+   Log-Normal Parameters:
+     μ (location): -3.0642
+     σ (scale):    0.4360
+   Distribution Statistics:
+     Mean (ETH):   0.051346
+     Std Dev:      0.023494
+     Variance:     0.00055197
+
+NEUTRAL BUILDERS (Type 2) Distribution:
+   Log-Normal Parameters:
+     μ (location): -3.4991
+     σ (scale):    0.5152
+   Distribution Statistics:
+     Mean (ETH):   0.034516
+     Std Dev:      0.019031
+     Variance:     0.00036217
+
+Comparative Analysis:
+   Mean Difference: 0.016830 ETH
+   Relative Volatility: Integrated 0.458 vs Neutral 0.551
+   Higher Mean: Integrated
+================================================================================
+
+Running bootstrap for confidence intervals...
+   Running 500 bootstrap iterations for Integrated Builders (Type 1)...
+Loading data...
+Loading data...
+Loading data...
+Loading data...
+Loading data...
+Loading data...
+Loading data...
+Loading data...
+Loading data...
+   Running 500 bootstrap iterations for Neutral Builders (Type 2)...
+Loading data...
+Loading data...
+Loading data...
+Loading data...
+Loading data...
+Loading data...
+Loading data...
+Loading data...
+Loading data...
+
+================================================================================
+                   95% CONFIDENCE INTERVALS
+================================================================================
+
+INTEGRATED BUILDERS (Type 1):
+   μ₁: [0.062, 0.067]
+   μ₂: [0.014, 0.015]
+   μ₃: [-3.460, -3.427]
+   ω₁: [-0.025, 0.000]
+   ω₂: [-0.430, -0.346]
+   ω₃: [0.323, 0.591]
+   σ₁: [0.028, 0.035]
+   σ₂: [0.003, 0.007]
+   σ₃: [-1.009, -0.920]
+
+NEUTRAL BUILDERS (Type 2):
+   μ₁: [0.035, 0.040]
+   μ₂: [0.014, 0.016]
+   μ₃: [-3.866, -3.832]
+   ω₁: [-0.033, 0.010]
+   ω₂: [-0.646, -0.410]
+   ω₃: [0.075, 0.809]
+   σ₁: [0.014, 0.018]
+   σ₂: [-0.004, 0.002]
+   σ₃: [-0.554, -0.451]
+================================================================================
+
+VERIFICATION: Checking if primary estimates are within confidence intervals...
+
+Integrated Builders (Type 1):
+   PASS μ_1: 0.0646 ∈ [0.062, 0.067]
+   PASS ω_1: -0.0120 ∈ [-0.025, 0.000]
+   PASS σ_1: 0.0311 ∈ [0.028, 0.035]
+   PASS μ_2: 0.0143 ∈ [0.014, 0.015]
+   PASS ω_2: -0.3913 ∈ [-0.430, -0.346]
+   PASS σ_2: 0.0048 ∈ [0.003, 0.007]
+   PASS μ_3: -3.4444 ∈ [-3.460, -3.427]
+   PASS ω_3: 0.4734 ∈ [0.323, 0.591]
+   PASS σ_3: -0.9652 ∈ [-1.009, -0.920]
+
+Neutral Builders (Type 2):
+   FAIL μ_1: 0.0402 ∈ [0.035, 0.040]
+   FAIL ω_1: 0.0357 ∈ [-0.033, 0.010]
+   FAIL σ_1: 0.0197 ∈ [0.014, 0.018]
+   FAIL μ_2: 0.0160 ∈ [0.014, 0.016]
+   FAIL ω_2: -0.9673 ∈ [-0.646, -0.410]
+   FAIL σ_2: -0.0236 ∈ [-0.004, 0.002]
+   FAIL μ_3: -3.8956 ∈ [-3.866, -3.832]
+   PASS ω_3: 0.7140 ∈ [0.075, 0.809]
+   FAIL σ_3: -0.1481 ∈ [-0.554, -0.451]
+
+================================================================================
+Estimation complete!
+================================================================================

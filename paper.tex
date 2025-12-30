@@ -1,0 +1,492 @@
+\documentclass[12pt,reqno]{amsart}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\usepackage[samelinetheorem,notitle]{maherart}
+
+\usepackage{xurl}
+
+\usepackage{amsfonts,float,thmtools}
+
+\hypersetup{
+    pdftitle =
+        {Structural Estimation of MEV-Boost Auctions},
+    pdfauthor =
+        {Tivas Gupta, Mallesh M Pai, Max Resnick, and Xun Tang},
+    pdfsubject=
+        {Structural Estimation of MEV-Boost Auctions}
+}
+
+
+\begin{document}
+\raggedbottom
+\title{Structural Estimation of MEV-Boost Auctions}
+\author[Gupta]{Tivas Gupta}
+\author[Pai]{Mallesh M. Pai}
+\author[Resnick]{Max Resnick}
+\author[Tang]{Xun Tang}
+
+\address{\today}
+\begin{abstract}
+On the Ethereum blockchain, a randomly selected validator announces a block to advance the chain. Roughly 90\% of blocks are built through MEV-Boost, an open English auction where proposers sell their block-building rights in real time. Hundreds of thousands of these auctions are held every month, and revenues since inception in September 2022 total over 700k ETH ($\sim$ 2.1 Billion USD at current exchange rates). 
+
+While this data is publicly available, and the auction is clearly substantial economically, to our knowledge it has not been analyzed using formal tools from econometrics in the academic literature. We describe the market structure of this auction, assemble the auction data from a variety of sources, and are the first to formally analyze the auction using tools from the structural empirical auctions literature developed over the past two decades. We empirically estimate the distribution of bidders' values in this auction using these techniques. 
+
+Our estimates reveal substantial differences between two types of bidders: integrated builders (affiliated with high-frequency trading firms) and non-integrated builders (without trading arms). We find that integrated builders have systematically higher values and are more responsive to price volatility, with a 1-unit increase in absolute price change multiplying expected values by approximately 6.7\% for integrated builders versus 4.1\% for non-integrated builders. The model achieves an overall R² of 0.11 for integrated builders and 0.05 for non-integrated builders, indicating reasonable fit to the data. These estimates enable counterfactual analysis of alternative auction formats. For example, the theory of asymmetric auctions suggests that when some bidders are `strong' relative to others, first-price sealed-bid auctions may generate a higher revenue than open auctions. 
+
+\vspace{1em}
+\noindent \textsc{Keywords:} Structural Estimation, Auctions, Blockchain, MEV
+
+
+\end{abstract}
+
+%\date{\today}
+
+\maketitle
+
+\thispagestyle{empty}
+
+\newpage
+
+\pagenumbering{arabic} 
+\section{Introduction}
+Distributed public blockchains, such as Bitcoin and Ethereum, are secured by a network of nodes (``validators'') that validate transactions and add them to the blockchain. In Ethereum, a randomly selected validator (also called a \textit{proposer} when it is their turn to propose a block) is chosen to propose a new block to the blockchain. The proposer has complete authority over which transactions from the mempool are included in the next block, and in what order. They may decide to include transactions that they have personally submitted, prioritize more recently submitted transactions rather than follow any sort of time-based prioritization, or even completely ignore valid pending transactions. 
+
+On smart contract blockchains such as Ethereum, which host multiple large decentralized trading venues (e.g., Uniswap), the right to propose a block is both potentially very lucrative and difficult for a randomly chosen proposer to fully exploit. This difficulty arises because extracting maximum value from block construction requires sophisticated algorithms to identify and exploit MEV opportunities, as well as access to private order flow and high-frequency trading infrastructure.\footnote{Readers unfamiliar with blockchain technology may find it helpful to consult the Quick Primer in Appendix A, though this is optional for understanding the main results.} 
+
+
+As a result, most Ethereum blocks today are built by specialized \textit{builders} rather than the nominal proposer of the block. In every slot, builders gather valid transactions and assemble them into blocks. They then compete against each other in an ascending price (English) auction for the right to have the block they assembled proposed by the proposer. Whichever builder bids the highest wins the auction, and pays their bid to the proposer. This auction, known as MEV-Boost, implements Proposer-Builder Separation (PBS), a design pattern that separates the roles of block proposal and block construction. MEV-Boost has been in place since roughly September 2022. It has constructed most (over 90\%) of the blocks proposed over this time period, and the cumulative revenues of this auction exceed 700k ETH, or $\sim$ 2.1 billion USD at current prices.\footnote{Source: \url{www.mevboost.pics}} 
+
+While several recent papers have documented the market structure and bidding behavior in MEV-Boost \citep{gupta2023centralizing, wahrstätter2023time, oz2024who, wu2024strategic}, including empirical analysis of the oligopolistic structure and centralization trends \citep{wu2024centralization}, none have applied structural econometric methods to estimate the underlying distribution of builder values, which is necessary for counterfactual analysis. 
+
+Despite this being an organized (and well-documented) auction, the resulting data has not been analyzed using formal tools from econometrics, in particular the rich literature on empirical analysis of auctions \citep{hendricks2007empirical,haile2003inference,athey2002identification}. Such an analysis is valuable for several reasons. First, as a form of pure research: the MEV-Boost auction comprises a substantially richer auction dataset than those available in the public domain, with an order of magnitude more underlying auctions than other popular datasets (e.g., from government procurement or licensing). More importantly, bids in an auction are an \emph{endogenous} object---they result from \emph{equilibrium} behavior among bidders. The toolkit of structural empirical auctions allows us to identify the underlying \emph{primitives}, i.e., the distribution of true underlying values of the bidders. Access to these primitives enables us to study \emph{counterfactuals}, i.e., to estimate auction outcomes under alternate auction rules and formats. 
+
+As an example, the theory of auctions tells us that when buyers have asymmetric distributions of values, then sealed-bid first-price auctions may result in higher revenues than English auctions---see, e.g., \cite{10.1111/1467-937X.00137} or \cite{kirkegaard2012mechanism}. As we describe below, we do indeed believe that this auction is one where there are two heterogeneous kinds of builders. Given estimates of the underlying distribution of values of each, we can therefore study whether MEV-Boost would be better served as a first-price auction. We can also better understand various drivers of value, and how these differentially affect the bidders in this auction. 
+
+The remainder of this paper proceeds as follows. Section 1.1 explains the sources of value in block building (MEV opportunities) and the heterogeneity between integrated and non-integrated builders. Section 1.2 describes the MEV-Boost auction mechanism. Section 2 presents our structural model for estimating builder value distributions. Section 3 describes our data sources and construction. Section 4 presents our preliminary estimation results and their interpretation. Section 5 concludes with a discussion of data limitations, future improvements, and planned counterfactual analyses.
+
+\subsection{MEV and Block Building}
+The right to build a block in Ethereum is valuable for several reasons, most obviously because users pay \textit{tips} (also known as priority fees) for inclusion, and these tips accrue to the proposer of the block that includes the transaction. However, presently these tips make up only a small portion of the total value from building a block. As hinted at above, the majority of the value from building a block comes from exploiting \emph{MEV opportunities}. MEV (Maximal Extractable Value) refers to additional value that can be exploited from strategically reordering or including specific transactions. Finding and maximizing MEV opportunities is a computationally challenging problem, over and above the already difficult knapsack problem of selecting a subset of transactions to include in the block \citep{mohan2024knapsack}. The desire to efficiently extract MEV is the original impetus for the development of MEV-Boost. 
+
+However, over the past year or so there has been substantial evolution in our understanding of how builders operate. To understand these, it is useful to discuss current MEV opportunities on Ethereum. These can be broadly segmented into two categories: \textit{top-of-block} and \textit{block body}. Let us describe each in turn. 
+
+Block-body opportunities are typically frontrunning, backrunning, or sandwiching user transactions. These were the original forms of MEV opportunities seen in practice (see \cite{daian2020flash} for a detailed discussion).  A sandwich transaction is a classic example of block-body MEV extraction. Consider a user transaction that attempts to swap token A for token B on a decentralized exchange (DEX) like Uniswap. When a searcher observes this pending transaction in the mempool, they can extract value by inserting two transactions around it: first, a transaction that purchases token B before the user's swap (front-running), and second, a transaction that sells the acquired token B after the user's swap completes (back-running). The user's swap moves the price of token B in a predictable direction, allowing the searcher to profit from the price movement they help create. The searcher must pay the builder a tip to ensure their two transactions are included in the correct order around the user's transaction.
+
+When multiple searchers identify the same profitable sandwich opportunity, they compete to have their sandwich transactions included in the block. This competition manifests as an implicit auction: each searcher must outbid others by offering higher tips to the builder. As more searchers attempt to sandwich the same user transaction, the tips offered to builders are bid up, with each searcher willing to pay up to their expected profit from the sandwich minus their execution costs. In equilibrium, this competitive dynamic typically ensures that much of the value extracted from sandwiching flows to the builder (and subsequently to the proposer through the MEV-Boost auction), rather than being retained by the searcher.
+
+Top-of-block opportunities are primarily CEX/DEX arbitrage: exploiting price divergences of a token between a centralized exchange (CEX) such as Binance or Coinbase, and some on-chain Decentralized Exchange (DEX) operated by a smart contract, e.g., Uniswap. These arbitrage opportunities arise because DEX prices update only when transactions are executed on-chain (e.g., every 12 seconds on Ethereum), while CEX prices update continuously in real-time. When a significant price movement occurs on a CEX (e.g., due to news or large trades), the corresponding DEX price remains stale until someone executes a trade. An arbitrageur can profit by simultaneously buying the token on the cheaper venue and selling it on the more expensive one. The game-theoretic properties of MEV extraction in automated market makers have been analyzed theoretically \citep{kulkarni2022mevtheory}, providing a framework for understanding these arbitrage dynamics. Recent empirical work has measured the profitability of searchers engaging in CEX-DEX arbitrage and documented the competitive dynamics in this space \citep{wu2025darkest}.
+
+To maximize profitability, arbitrageurs typically need to execute the on-chain DEX transaction at the very beginning of the block, before any other transactions can update the DEX price. This is why these opportunities are called ``top-of-block''---they must be among the first transactions in the block to be profitable. The arbitrageur must also execute the corresponding trade on the CEX with minimal latency and transaction costs, which requires sophisticated high-frequency trading infrastructure, direct market access to exchanges, and favorable fee arrangements.
+
+When multiple arbitrageurs identify the same price divergence, they compete in the MEV-Boost auction to win the right to build a block that includes their arbitrage transaction at the top. The value of winning the auction increases with the size of the price divergence, as larger divergences yield larger arbitrage profits. This creates a direct link between CEX price movements and MEV-Boost bid amounts: when substantial price movements occur on centralized exchanges during the 12-second auction window, builders who can capture this arbitrage value bid aggressively, sometimes resulting in winning bids that are orders of magnitude higher than typical blocks. 
+
+Due to the complexity of coordinating non-atomic arbitrage across multiple venues, top-of-block arbitrage is increasingly exploited by a subset of builders that we term ``integrated builders.'' These are builders owned and operated by teams that also run high-frequency trading operations---examples of such builders in the current market are Rsync and Beaverbuild, which operate proprietary trading arms alongside their building operations. We term the remaining builders as ``non-integrated builders''---these are builders who focus on ordering transactions provided by other entities (e.g., searchers who identify MEV opportunities). This distinction between integrated and non-integrated builders has been documented in recent empirical work \citep{gupta2023centralizing, oz2024who}, which shows that integrated builders have a competitive advantage in capturing high-value arbitrage opportunities. 
+
+The differences in business models of these builders suggests that these builders will have differences in their values as a function of various observables: for example, an integrated builder might have higher values if the realized price movement on the CEX in the preceding 12 seconds was higher, since that increases the value of the arbitrage with the stale DEX prices. This heterogeneity in MEV opportunities and builder capabilities creates a natural two-type structure in the auction, which we model formally in Section 2.
+
+\subsection{MEV-Boost Auction}
+
+MEV-Boost is an opt-in system that implements Proposer-Builder Separation (PBS) on Ethereum. Validators (proposers) can choose to participate in MEV-Boost rather than building blocks themselves. When a validator opts in, they delegate the block construction process to specialized builders while retaining their role in block proposal and validation. This separation allows validators to capture MEV revenue without the technical expertise and infrastructure required for sophisticated block building.
+
+The MEV-Boost auction operates through a network of \textit{relays}, which serve as trusted intermediaries between builders and proposers. There are currently several active relays (e.g., Flashbots, BloXroute, Eden, etc.), each operating independently. The relay architecture addresses several critical trust and security requirements: builders trust relays to keep their block contents private until after the auction concludes (preventing proposers or other builders from stealing transactions), while proposers trust relays to verify that the payment attached to a builder's bid will actually be included in the proposed block. This verification is necessary because proposers use ``blind signing''---they sign the block header without seeing the block body---to protect the MEV that builders will extract. Blind signing is essential because if proposers could see the block contents before signing, they could extract the MEV themselves or share it with other builders, undermining the separation of roles.
+
+From a game-theoretic perspective, MEV-Boost operates as an ascending-price (English) auction. We model it as a private-value auction, which we justify below. The auction proceeds as follows: In Ethereum, every 12 seconds (the fixed block time), a new block slot begins. During this 12-second window, builders gather transactions from the mempool (and potentially from private order flow) and assemble them into candidate blocks. Each builder then submits bids to one or more relays, where each bid consists of: (i) a bid amount (in ETH) that the builder will pay to the proposer, (ii) a block header (which the proposer will sign), and (iii) a commitment to the full block body (which remains hidden from the proposer until after selection).
+
+The relays aggregate bids from all builders and make them visible to proposers. A crucial feature of the auction is that while bid amounts are observable to all participants (including other builders), the block contents corresponding to each bid remain private. This creates an open auction format where builders can observe competing bids and adjust their own bids accordingly, leading to reactive bidding behavior where bids often arrive in quick succession near the end of the 12-second window.
+
+The proposer selects a winning bid from among those available at the relay(s) they are connected to, almost always choosing the highest bid. The selection occurs near the end of the 12-second slot, as proposers face a trade-off: waiting longer allows more bids to arrive and potentially higher values to materialize (e.g., from CEX price movements), but waiting too long risks missing the deadline to propose a block and losing all revenue. Once selected, the proposer signs the block header, the relay reveals the full block body, and the proposer verifies that the payment is included. The highest bidder wins the right to have their pre-constructed block proposed on-chain, and pays their bid amount to the proposer.
+
+The opt-in nature of MEV-Boost means that not all validators participate---approximately 5-10\% of validators still build blocks themselves. However, MEV-Boost has captured over 90\% of blocks since its introduction in September 2022, indicating that the vast majority of validators find it profitable to delegate block construction to specialized builders. 
+
+The auction structure described above, combined with the heterogeneity in builder types and MEV opportunities, motivates our structural modeling approach. We now turn to a formal model that allows us to estimate the underlying distribution of builder values.
+
+\section{Model}
+In this section, we describe the model we use to estimate the distribution of bidders' values in the MEV-Boost auction. 
+
+From an economic perspective, our modeling approach recognizes that builder values have both common and idiosyncratic components. The common component captures factors that affect all builders of the same type similarly within an auction---for example, all integrated builders observe the same CEX price movements and face similar arbitrage opportunities. The idiosyncratic component captures builder-specific private information, such as access to exclusive order flow, proprietary transaction selection algorithms, or builder-specific cost structures. This decomposition is standard in the empirical auctions literature and allows us to separately identify the distribution of common shocks (which affect all bidders of a type) from the distribution of private information (which varies across individual bidders). The two-type structure (integrated vs. non-integrated) reflects the fundamental heterogeneity in builder business models discussed in Section 1, where integrated builders have systematic advantages in capturing certain types of MEV opportunities. 
+
+
+We model the auction as a pool of $n$ builders (bidders) who compete in a private-value ascending auction. The private-values assumption is standard in this literature and appropriate here because a bidder's value from winning depends on the specific block they have constructed, and learning that other bidders have higher or lower values does not affect their own value from winning.
+
+The sole winner from the auction gets their block announced as the next block on the blockchain. The private value of each builder $i$ from building the block, denoted by $V_{i}$, is decomposed into a ``\textit{common}'' component $\tilde{C}%
+_{i} $ and an `` \textit{idiosyncratic}''
+component $\epsilon _{i}$:%
+\[
+V_{i}=\tilde{C}_{i}+\epsilon _{i}\text{.} 
+\]%
+We treat $\tilde{C}_{i}$ as a type-level common component and write it as $C_{t}$ for builders of type $t$. The common component is drawn from a distribution that conditions on $X$, which denotes all value-related information from a pool of publicly announced transactions. These transactions, and therefore $X$, are commonly observed by all builders and researchers. We may also let $X$ contain other publicly observable information related to the history or the state of the blockchain. In our current specification, we use two observable variables: the absolute price movement of Ether on the Binance CEX in the preceding 12 seconds, and the gas price of the current block (which is known at the time of block building). Additional observables (including the best possible bid of an open-source builder using the public mempool) could be incorporated in future work. The idiosyncratic component $\epsilon_{i}$ is drawn from a distribution that is also potentially correlated with $X$, but is only privately observed by builder $i$.
+
+
+The sample available to researchers contains a large number of auctions over time. (We drop the index for auctions to simplify notation below.) Each auction lasts for 12 seconds. While MEV-Boost operates with discrete bids submitted over a fixed time window, we model it as an English auction where bidders can observe competing bids and adjust their own bids accordingly. Under the theoretical framework of a continuous ascending auction (the so-called Japanese auction format analyzed in \cite{milgrom1982theory}), where the price rises continuously and bidders drop out when the price reaches their value, it is a dominant strategy to bid truthfully. This truthful bidding assumption is crucial for our identification strategy, as it ensures that non-winning bidders' final bids equal their true values. While the actual MEV-Boost auction has discrete bids and a fixed time window, the open format where all bid amounts are observable allows builders to react to competing bids, making truthful bidding approximately optimal. We treat these auctions as strategically independent in that the outcome from earlier auctions does not affect strategy in future auctions, at least after conditioning on the evolution of public information in $X$. 
+
+\begin{assumption}\label{assum:A3}
+Auctions are strategically independent: conditional on $X$, the outcome from earlier auctions does not affect bidding strategies in future auctions.
+\end{assumption}
+
+For every builder $i$, let $P_{i}$ denote their highest bid submitted in the auction; this is the object we observe in the data. For all bidders $i$ who do not win the auction, we assume $P_{i}=V_{i}$ (under the truthful bidding assumption); for the sole winner $j$ of the auction, we know $P_{j}\leq V_{j}$, and $V_{j}\geq V_{i}$ $\forall i=1,...,n$. We observe $X$ for each block auction.
+
+The builder identities are fixed across auctions, i.e., the same set of builders compete in the sequence of auctions over time. Suppose we know that the set of builders $N\equiv \{1,2,..,n\}$ can be partitioned into two types $N_{1}\cup N_{2}=N$ such that builders are \textit{ex ante} type-symmetric. In future work, it is possible to add other ``fringe builders'' and pool them into a single identity in the auction games, as is common in typical IO models.
+
+\begin{assumption}\label{assum:A1}
+For $t=1,2$ and all $i\in N_{t}$, (i) $\tilde{C}_{i}=C_{t}$, with $C_{t}$ drawn from $G_{t}(\cdot |X)$, and (ii) $\epsilon _{i}$ are drawn from a type-specific marginal distribution $F_{t}(\cdot |X)$.
+\end{assumption}
+
+Thus $C_{t}$ is a type-specific common shock within each auction, shared by all type-$t$ builders in that auction.
+
+Note both $G_{t}$ and $F_{t}$ are type-specific (i.e., do not vary at the individual builder level within each type). Furthermore, assume there is independence among builder information in the following sense:
+
+\begin{assumption}\label{assum:A2}
+Conditional on $X$, the common components $C_{t}$ are independent between the types $t=1,2$.
+\end{assumption}
+
+\begin{assumption}\label{assum:A4}
+Conditional on $(C_{t},X)$, builder idiosyncratic components $\epsilon _{i}$ are independent across all builders $i\in N$, and $\epsilon _{i}$ is independent from $C_{t}$ conditional on $X$.
+\end{assumption}
+
+To sum up, under (A1), (A2), and (A4), the joint distribution of the information available to a type-$t$ builder $i$ is multiplicatively separable as follows:%
+\begin{equation}
+F_{t}(\epsilon _{i}|X)\times G_{t}(C_{t}|X)\text{.}  \label{A1}
+\end{equation}
+This separability means that the common shock and idiosyncratic components are independent conditional on observables, which is key to our identification strategy.
+
+Let $V_{t}^{(r:n_{t})}$ (and $\epsilon _{t}^{(r:n_{t})}$) denote the $r$-th order statistic out of $n_{t}$ latent private values $V_{i}$ (idiosyncratic components $\epsilon _{i}$) \textit{from type-}$t$\textit{\ builders}. These are latent objects. Note that $P_{i}$ is the highest bid submitted by a builder (on most occasions these bids are clustered near the end of the 12-second period), while $V_{i}$ is the underlying private value. Under our truthful bidding assumption, $P_{i}=V_{i}$ for all non-winners.
+The identification argument below conditions on $X$, which is suppressed to
+simplify notation. For each $t=1,2$, we observe the joint distribution of $%
+\{P_{t}^{(r:n_{t})}:r\leq n_{t}-1\}$ (conditional on $X$) from the bid data,
+where $n_{t}$ denotes the number of type-$t$ builders in an auction. By
+construction, 
+\[
+P_{t}^{(r:n_{t})}=C_{t}+\epsilon _{t}^{(r:n_{t})}\text{ for }r\leq n_{t}-1%
+\text{ and }t=1,2\text{.} 
+\]
+We exclude the highest order statistic because the winning bid is censored: $P_{j}\leq V_{j}$, so the top order statistic is not observed.
+
+Conditional on $X$, $C_{t}$ is independent from $\epsilon _{t}^{(r-1:n_{t})}$
+and $\epsilon _{t}^{(r:n_{t})}$, where $\epsilon _{t}^{(r:n_{t})}$ is the $r$%
+-th smallest order statistic out of $n_{t}$ \textit{independent} draws from
+the \textit{same} type-$t$ distribution of $\epsilon _{i}$ given $X$, i.e., $%
+F_{t}(\cdot |X)$. 
+
+The identification argument proceeds as follows. We observe multiple order statistics from the same type (e.g., the second-highest, third-highest, etc. bids from type-$t$ builders). Each order statistic is the sum of the common component $C_t$ (shared by all type-$t$ builders) and an idiosyncratic order statistic $\epsilon_t^{(r:n_t)}$. Because the common component affects all bidders of the same type identically, while the idiosyncratic components are independent across bidders, we can use the variation across order statistics to separate these two components. Specifically, using the deconvolution method from \cite{cho2024deconvolution}, we can recover the distribution $G_{t}(\cdot |X)$ and $F_{t}(\cdot |X)$ up to a location normalization. The key insight is that by observing multiple order statistics from the same type, we can separate the common component (which affects all bidders of that type) from the idiosyncratic component (which varies across individual bidders). The location normalization arises because we can only identify the distributions up to an additive constant, which is standard in this literature. In our estimation, we normalize by setting the mean of the common component to zero when all observables are at their sample means.\textit{\medskip }
+
+To make the estimation tractable, we parameterize $G_{t}(\cdot |X;\theta )$ and $F_{t}(\cdot |X;\theta )$ into location-scale families. This parameterization is standard in the empirical auctions literature and allows us to use nonlinear least squares estimation, which may be less computationally costly than maximum likelihood estimation.
+
+Under the location-scale parameterization, we can write $C_{t}$ and $\epsilon _{i}$ (with $i$
+being type-$t$) as:%
+\begin{eqnarray*}
+C_{t} &\equiv &\mu _{t}(X;\theta _{t}^{\mu })+\sigma _{t}(X;\theta
+_{t}^{\sigma })\times \upsilon _{t}\text{, }\sigma _{t}(\cdot )>0\text{;} \\
+\epsilon _{i} &\equiv &\omega _{t}(X;\theta _{t}^{\omega })\times \eta _{i}%
+\text{, }\omega _{t}(\cdot )>0\text{,}
+\end{eqnarray*}%
+where $\upsilon _{1},\upsilon _{2},\eta _{1},...,\eta _{n},X$ are \textit{%
+mutually independent} with $\upsilon _{t},\eta _{i}$ drawn from known,
+standardized parametric distributions with \textit{zero mean} and \textit{%
+unit variance}. 
+It then follows that for any $r_{t}\leq n_{t}-1$:%
+\begin{equation}
+E\left( \left. P_{t}^{(r_{t}:n_{t})}\right\vert X\right) =E(C_{t}|X)+E\left(
+\left. \epsilon _{t}^{(r_{t}:n_{t})}\right\vert X\right) =\mu _{t}(X;\theta
+_{t}^{\mu })+\omega _{t}(X;\theta _{t}^{\omega })\times m_{(r_{t}:n_{t})}%
+\text{,}  \label{eq:location_scale_iden}
+\end{equation}%
+where $P_t^{(r:n_{t})}$ denotes the $r$-th order statistic out of $n_{t}$ independent draws from the marginal distribution of $P_t$ for $t=1,2$ respectively, and $m_{(r:n_{t})}\equiv E\left[ \eta ^{(r:n_{t})}\right] $. Given the standardized distribution of $\eta _{i}$, $m_{(r:n_{t})}$ is a known constant. Similarly, we define $\delta _{(r:n)}\equiv V\left[ \eta ^{(r:n)}\right] $, which is also a known constant given the standardized distribution.
+
+Likewise, we can write the conditional variance of $P_t^{(r:n_{t})}$ as:
+\begin{equation}
+  V\left( \left. P_{t}^{(r_{t}:n_{t})}\right\vert X\right) =\sigma
+  _{t}^{2}(X;\theta _{t}^{\sigma })+\omega _{t}^{2}(X;\theta _{t}^{\omega
+  })\times \delta _{(r_{t}:n_{t})}\text{,}
+  \label{eq:variance_orderstat}    
+\end{equation}
+
+For simplicity, we assume that the number of type-$t$ bidders is fixed at $n_{t}$ across all auctions in the sample. In practice, we handle variation in participation by conditioning on the observed number of bidders. We use all available order statistics (not just the second-highest) to improve efficiency. That is, we use $r_{t}=1,2,\ldots,n_{t}-1$ for each type $t$. 
+
+The non-linear least squares estimation proceeds in two steps:\textit{\medskip }
+
+\noindent \textit{Step 1}. For $t=1,2$, estimate the mean and idiosyncratic scale parameters:
+\[
+\hat{\theta}_{t}=\arg \min_{\theta }\frac{1}{B}\sum_{b}%
+\sum_{r=1}^{n_{b,(t)}-1}\left[ p_{b,t}^{(r)}-\mu _{t}(x_{b};\theta
+)-m_{(r:n_{b,(t)})}\times \omega _{t}(x_{b};\theta )\right] ^{2}\text{,} 
+\]%
+where $p_{b,t}^{(r)}$ is the $r$-th order statistic among $n_{b,(t)}$ type-$t$
+builders in auction $b$, and $B$ is the total number of auctions.\textit{\medskip }
+
+\noindent \textit{Step 2}. For $t=1,2$, estimate the common shock volatility $\sigma _{t}(X;\theta )$ by
+plugging $\omega _{t}(X;\hat{\theta})$ from the first step into the sample
+analog of the variance expression in (\ref{eq:variance_orderstat}). Specifically, we use the sample variance of order statistics and solve for $\sigma_t$ using equation (\ref{eq:variance_orderstat}).\textit{\medskip }
+
+We use standard bootstrap to calculate confidence intervals. The bootstrap procedure resamples auctions with replacement and re-estimates the parameters on each bootstrap sample. We use 1,000 bootstrap replications and report percentile-based confidence intervals. This approach accounts for sampling variation and potential correlation across auctions, and is standard in the empirical auctions literature \citep{hendricks2007empirical}.
+
+To summarize, our model decomposes builder values into common and idiosyncratic components, where the common component captures type-specific factors (e.g., CEX price movements affecting all integrated builders similarly) and the idiosyncratic component captures builder-specific private information. Under our assumptions, we can separately identify the distributions of both components using order statistics from the bid data. The estimation proceeds in two steps: first, we estimate the mean and idiosyncratic scale parameters using the conditional mean of order statistics; second, we estimate the common shock volatility using the conditional variance. This approach allows us to recover the full distribution of builder values, which is necessary for counterfactual analysis.
+
+\section{Data}
+To estimate the model parameters described in Section 2, we require data on bids, builder identities, and observable characteristics that affect block value. We describe our data sources and construction below.
+
+The data used in this paper is sourced from 95,000 MEV-Boost auctions sampled from selected days between October and December 2024. This sample size provides sufficient variation for reliable estimation of the model parameters. The sampling strategy selects representative days across the three-month period to capture variation in market conditions while maintaining computational tractability. In each of these slots, bids from the active relays are aggregated, with the winning bid selected by matching the attached block hash of bids to the hash of the block that made it on-chain. 
+
+We identify the winning bidder and other participants in the auction by mapping their bidding addresses to publicly known builder identities. This mapping is based on public sources including builder announcements, relay operator disclosures, and blockchain analytics. Based on observed behavior patterns (e.g., responsiveness to CEX price movements) and known connections with high-frequency trading firms, we categorize builders as either integrated or non-integrated. In our sample, we observe 3 integrated builders (Rsync, Beaverbuild, and Titan) and 2 non-integrated builders consistently participating across auctions. These five builders account for over 75\% of blocks in our sample period. 
+
+A particular concern arises from the way this auction is conducted via the relays: a proposer may ``call'' the auction at any of the relays, with the best bid available at that relay therefore being the winner. In our data, we do not observe which relay was called by the proposer, or the exact time at which the auction was called. To address this, we ``close'' the auction at the earliest instant the true winning bid arrives at any relay, discarding any higher or later bids that may have arrived after the proposer's decision. We can thus associate with each bidder their highest bid in the auction, regardless of whether they won or lost. This approach ensures that we capture the bid that was actually available to the proposer at the time of selection. Recent work has documented that many transactions proposed during a bidding cycle are not included in the corresponding winning block, with many such delayed transactions being exclusive to losing builders \citep{canidio2024becomingimmutable}, highlighting the importance of understanding transaction inclusion dynamics.
+
+
+Within each auction, we track several variables alongside the winning bid and the bids of other prolific bidders. We track the base fee per gas of the block, which reflects network congestion at the time of the bid and the potential profits collected by the builder from transaction fees. Gas is the unit of computational work on Ethereum, and gas prices (measured in Gwei, where 1 Gwei = $10^{-9}$ ETH) represent the fees users pay to have their transactions processed. The gas fee in our sample ranges from 6.38 Gwei at the 25th percentile to 19.92 Gwei at the 75th percentile, with a median of 12.15 Gwei, highlighting substantial volatility in network congestion. The number of transactions in the mempool at the time of the block is also available, including the number of transactions which would have paid the base fee. This figure represents the demand for blockspace during each slot, as each transaction over the base fee is a potentially profitable inclusion for a builder with available space in their block. While the median percent of transactions in the mempool that pay the base fee is only 17 percent, there are periods of high demand for blockspace where this figure is significantly higher, near 100 percent. 
+
+Finally, we track the absolute price movements of the ETH-USDC pair on Binance over the 12 seconds of each slot. High volatility periods provide more arbitrage opportunities, leading to significantly higher bids in the MEV-Boost auction from integrated builders. For example, the maximum winning bid amount is four orders of magnitude higher than the 75th percentile winning bid amount. These extreme bids occur when there are large arbitrage opportunities available, and are evidence of the ``lottery blocks'' that are extremely valuable to proposers. 
+
+The observable variables $X$ that we use in estimation are plausibly exogenous to individual builder bidding decisions: CEX price movements are determined by external market forces, and gas prices reflect overall network congestion rather than individual builder actions. This exogeneity is important for our identification strategy, as it ensures that the relationship between $X$ and builder values reflects causal effects rather than selection or endogeneity.
+
+\section{Results}
+Using the data described above, we estimate the model parameters. We present our results below.
+
+In our baseline specification, we assume that $\epsilon$ is distributed lognormally. The lognormal distribution is a natural choice for modeling positive-valued random variables that result from multiplicative processes, which is appropriate here since builder values depend on the product of multiple factors (transaction fees, MEV opportunities, etc.). We assess the fit of this assumption through residual analysis and find that it captures the main features of the bid distribution, though we acknowledge that alternative distributions (e.g., gamma or Weibull) could be explored in future work as robustness checks.
+
+We use three explanatory variables in our current specification: the absolute price change of ETH-USD on Binance in the preceding 12 seconds ($X_1$), the gas price of the block measured in Gwei ($X_2$), and a constant term. Additional observables (e.g., mempool composition, time-of-day effects) could be incorporated to improve model fit, but we focus on these core variables to establish the baseline estimates. 
+ 
+We assume the following functional forms for the location and scale parameters:
+\begin{align*}
+  &\mu_t (X) = \mu_{t,1} X_1 + \mu_{t,2} X_2 + \mu_{t,3},\\
+  &\sigma_t(X) = \exp \{\sigma_{t,1} X_1 + \sigma_{t,2} X_2 + \sigma_{t,3}\},\\
+  &\omega_t(X) = \exp \{\omega_{t,1} X_1 + \omega_{t,2} X_2 + \omega_{t,3}\},
+\end{align*}
+for $t=1,2$ (integrated and non-integrated builders, respectively). Here, $X_1$ is the absolute ETH-USD price change, $X_2$ is the gas price, and the constant terms allow for baseline levels that don't depend on observables. The location parameter $\mu_t(X)$ is linear in the observables, while the scale parameters $\sigma_t(X)$ and $\omega_t(X)$ use exponential forms to ensure they are always positive, which they must be by assumption. This functional form is flexible enough to capture non-linear relationships while remaining parsimonious. We assume the same functional form across both types but allow all parameters to differ, which permits differential responses to observables while maintaining a common structure.
+
+Results from the non-linear least squares estimator and associated 95\% confidence intervals (based on 1,000 bootstrap replications) are shown in Table \ref{tab:prelim_estimation_results}.
+
+The estimates reveal economically sensible patterns. For integrated builders, the coefficient on price volatility ($\mu_1 = 0.0646$) is larger than for non-integrated builders ($\mu_1 = 0.0402$), which aligns with our expectation that integrated builders derive more value from CEX/DEX arbitrage opportunities that arise from price movements. Both types show positive sensitivity to gas prices ($\mu_2 = 0.0143$ for integrated and $\mu_2 = 0.0160$ for non-integrated), suggesting that network congestion affects all builders through similar channels. The exponential functional forms capture non-linear relationships between observables and builder values. The model achieves an overall R² of 0.1094 for integrated builders and 0.0485 for non-integrated builders, indicating reasonable fit to the data.
+
+\begin{table}[t]
+\centering
+\caption{Preliminary estimation results by builder type}
+\label{tab:prelim_estimation_results}
+
+\small
+\setlength{\tabcolsep}{7pt}
+\renewcommand{\arraystretch}{1.15}
+
+\begin{tabular}{llcc}
+\hline\hline
+ &  & \multicolumn{1}{c}{Integrated} & \multicolumn{1}{c}{Non-Integrated} \\
+\cline{3-4}
+\textbf{Parameter} & \textbf{Regressor} & \multicolumn{1}{c}{\textbf{Estimate}} & \multicolumn{1}{c}{\textbf{Estimate}} \\
+ &  & \multicolumn{1}{c}{\textbf{(95\% CI)}} & \multicolumn{1}{c}{\textbf{(95\% CI)}} \\
+\hline
+
+\multicolumn{4}{l}{\textit{Panel A: Level} \quad $\mu(X)=\exp\{\mu_1 X_1+\mu_2 X_2+\mu_3\}$} \\
+\hline
+$\mu_1$ & $X_1$     & 0.0646 & 0.0402 \\
+        &           & (0.062,\;0.067) & (0.035,\;0.040) \\
+$\mu_2$ & $X_2$     & 0.0143 & 0.0160 \\
+        &           & (0.014,\;0.015) & (0.014,\;0.016) \\
+$\mu_3$ & Constant  & -3.4444 & -3.8956 \\
+        &           & (-3.460,\;-3.428) & (-3.865,\;-3.833) \\
+\hline
+
+\multicolumn{4}{l}{\textit{Panel B: Idiosyncratic scale} \quad $\omega(X)=\exp\{\omega_1 X_1+\omega_2 X_2+\omega_3\}$} \\
+\hline
+$\omega_1$ & $X_1$   & -0.0120 & 0.0357 \\
+           &         & (-0.024,\;0.001) & (-0.034,\;0.008) \\
+$\omega_2$ & $X_2$   & -0.3913 & -0.9673 \\
+           &         & (-0.426,\;-0.347) & (-0.648,\;-0.409) \\
+$\omega_3$ & Constant& 0.4734 & 0.7140 \\
+           &         & (0.325,\;0.585) & (0.068,\;0.814) \\
+\hline
+
+\multicolumn{4}{l}{\textit{Panel C: Common-shock volatility} \quad $\sigma(X)=\exp\{\sigma_1 X_1+\sigma_2 X_2+\sigma_3\}$} \\
+\hline
+$\sigma_1$ & $X_1$   & 0.0311 & 0.0197 \\
+           &         & (0.028,\;0.034) & (0.014,\;0.018) \\
+$\sigma_2$ & $X_2$   & 0.0048 & -0.0236 \\
+           &         & (0.002,\;0.006) & (-0.004,\;0.003) \\
+$\sigma_3$ & Constant& -0.9652 & -0.1481 \\
+           &         & (-1.009,\;-0.915) & (-0.553,\;-0.453) \\
+\hline\hline
+\end{tabular}
+
+\vspace{4pt}
+\parbox{0.93\linewidth}{\footnotesize\emph{Notes:} Entries report point estimates with 95\% confidence intervals.
+$X_1$ is the absolute ETH--USD price change over the prior 12 seconds; $X_2$ is the block gas price (Gwei).}
+
+\end{table}
+
+\subsection{Interpretation of Regression Results}
+
+The structural estimates in Table \ref{tab:prelim_estimation_results} reveal several economically meaningful patterns that align with the theoretical framework and institutional details of the MEV-Boost auction. 
+
+Starting with the level parameters (Panel A), the positive and statistically significant coefficients on $X_1$ (absolute ETH price change) for both builder types confirm that price volatility is a key driver of block value. The larger coefficient for integrated builders (0.0646 vs. 0.0402) reflects their comparative advantage in capturing CEX/DEX arbitrage opportunities, as discussed in Section 1. This differential response is economically significant: a 1-unit increase in absolute price change multiplies the expected common component by $\exp(0.0646) \approx 1.067$ (a 6.7\% increase) for integrated builders versus $\exp(0.0402) \approx 1.041$ (a 4.1\% increase) for non-integrated builders. The positive coefficients on gas price ($\mu_2 = 0.0143$ for integrated and $\mu_2 = 0.0160$ for non-integrated) indicate that network congestion increases builder values, likely through its impact on transaction fees and blockspace demand, with similar sensitivity across types.
+
+The idiosyncratic scale parameters (Panel B) show that $\omega_2$ is negative and significant for both types ($\omega_2 = -0.3913$ for integrated and $\omega_2 = -0.9673$ for non-integrated), suggesting that higher gas prices reduce the variance of builder-specific private information. This may reflect that during high congestion periods, the set of profitable transactions becomes more standardized, reducing heterogeneity in builder valuations. The constant term $\omega_3$ is positive for both types (0.4734 for integrated and 0.7140 for non-integrated), indicating substantial idiosyncratic variation in builder values even after conditioning on observables.
+
+The common-shock volatility parameters (Panel C) reveal interesting patterns. The positive coefficients on $X_1$ ($\sigma_1 = 0.0311$ for integrated and $\sigma_1 = 0.0197$ for non-integrated) suggest that higher price volatility increases the variance of the common shock component, which is consistent with price movements creating more variable arbitrage opportunities. The coefficient on gas price ($\sigma_2$) is positive for integrated builders (0.0048) but negative for non-integrated builders (-0.0236), suggesting differential effects of congestion on common shock variance across types. The negative constant terms ($\sigma_3 = -0.9652$ for integrated and $\sigma_3 = -0.1481$ for non-integrated) indicate that the common shock has relatively low variance on average, which is consistent with builders of the same type sharing similar information about block value. The fact that $\sigma_3$ is more negative for integrated builders suggests that integrated builders share more similar information about block value, possibly because they all observe the same CEX price movements and face similar arbitrage opportunities.
+
+The negative constant terms in the level parameters ($\mu_3$) reflect the baseline (log) expected value when both $X_1$ and $X_2$ are zero. The fact that these are negative and more negative for non-integrated builders (-3.8956) than for integrated builders (-3.4444) suggests that integrated builders have higher baseline values, with differences emerging both through baseline levels and differential responses to observables like price volatility.
+
+These estimates provide the foundation for counterfactual analysis, as they allow us to simulate bidder values under alternative auction formats or market structures. The differential responses between integrated and non-integrated builders to price volatility, combined with the estimated distributions, enable us to quantify the revenue implications of different auction mechanisms. The structural approach allows us to go beyond reduced-form correlations: while a simple regression might show that integrated builders bid more when price volatility is high, our estimates reveal the underlying value distributions that generate these bidding patterns, enabling us to predict behavior under counterfactual scenarios where the auction format or market structure changes.
+
+\subsection{Implied Distributions for Individual Blocks}
+
+To illustrate how our estimates translate into block-specific value distributions, consider a randomly selected block in our sample (block 20,915,921, slot 10,125,585) with $X_1 = 2.21$ basis points (absolute ETH-USD price change) and $X_2 = 19.40$ Gwei (base fee per gas).\footnote{Our code makes it easy to compute these distributions for any block in the sample.} Using our parameter estimates, we compute the distribution parameters:
+
+\begin{align*}
+\mu_1(X) &= 0.0646 \times 2.21 + 0.0143 \times 19.40 - 3.4444 = -3.024,\\
+\omega_1(X) &= \exp\{-0.0120 \times 2.21 - 0.3913 \times 19.40 + 0.4734\} = 0.0005,\\
+\sigma_1(X) &= \exp\{0.0311 \times 2.21 + 0.0048 \times 19.40 - 0.9652\} = 0.448,
+\end{align*}
+
+for integrated builders, and
+
+\begin{align*}
+\mu_2(X) &= 0.0402 \times 2.21 + 0.0160 \times 19.40 - 3.8956 = -3.497,\\
+\omega_2(X) &= \exp\{0.0357 \times 2.21 - 0.9673 \times 19.40 + 0.7140\} = 0.00001,\\
+\sigma_2(X) &= \exp\{0.0197 \times 2.21 - 0.0236 \times 19.40 - 0.1481\} = 0.570,
+\end{align*}
+
+for non-integrated builders. Under the log-normal distribution assumption, these parameters imply expected values of $\exp(\mu_1(X) + 0.5\sigma_1^2(X)) = 0.054$ ETH for integrated builders and $\exp(\mu_2(X) + 0.5\sigma_2^2(X)) = 0.036$ ETH for non-integrated builders. The higher mean for integrated builders reflects their advantage in capturing arbitrage opportunities, while the larger $\sigma_2(X)$ indicates greater common-shock variance for non-integrated builders.
+
+
+\section{Conclusion}
+
+This paper provides, to our knowledge, the first structural econometric analysis of MEV-Boost auctions, one of the largest and most active auction markets in the world. By applying methods from the empirical auctions literature to this novel setting, we estimate the underlying distribution of builder values and reveal systematic differences between integrated and non-integrated builders. 
+
+Our main findings are threefold. First, we document substantial heterogeneity between builder types: integrated builders (affiliated with high-frequency trading firms) derive significantly more value from price volatility than non-integrated builders, with a 1-unit increase in absolute price change multiplying expected values by approximately 6.7\% for integrated builders versus 4.1\% for non-integrated builders. This differential response aligns with integrated builders' comparative advantage in capturing CEX/DEX arbitrage opportunities. Second, both builder types respond positively to network congestion (gas prices), with similar sensitivity ($\mu_2 = 0.0143$ for integrated and $\mu_2 = 0.0160$ for non-integrated), suggesting that congestion increases builder values through similar channels (transaction fees and blockspace demand). Third, our structural estimates reveal interesting patterns in the variance components: higher gas prices reduce idiosyncratic variation (suggesting more standardized transaction sets during congestion), while price volatility increases common shock variance (suggesting more variable arbitrage opportunities during volatile periods).
+
+These estimates provide the foundation for counterfactual analysis that can inform policy discussions about auction design and market structure in Ethereum's block building market. As we discuss in the following subsections, these estimates can be used to evaluate alternative auction formats, assess the impact of entry, and understand the welfare implications of different market structures.
+
+\subsection{Data Limitations and Future Improvements}
+
+Several limitations in our data and specification warrant discussion. First, our data construction relies on aggregating bids across multiple relays and inferring the auction closing time from the earliest arrival of the winning bid. This approach may not perfectly capture the true auction dynamics, as proposers may call the auction at different relays or times. Future work could incorporate relay-level data or proposer behavior to more accurately model the auction mechanism.
+
+Second, our current specification uses only two observable variables ($X_1$ and $X_2$). While these capture important drivers of block value, there are likely other relevant factors that could improve the model fit and counterfactual predictions. Promising additions include: (i) the number and composition of transactions in the mempool, (ii) the best possible bid from an open-source builder using only public mempool data, (iii) time-of-day or day-of-week effects that may capture systematic patterns in MEV opportunities, and (iv) lagged variables capturing recent auction outcomes or market conditions.
+
+Third, our assumption of a fixed number of bidders of each type across auctions is a simplification. In practice, builder participation may vary across slots, and some builders may strategically choose when to participate. Extending the model to allow for endogenous entry or varying participation would be a valuable direction for future research.
+
+Fourth, we assume that the distribution of $\epsilon$ is lognormal, which appears to fit the data reasonably well but may not capture all features of the bid distribution, particularly in the tails. Exploring alternative distributional assumptions or nonparametric methods could provide robustness checks and potentially improve the model fit.
+
+Finally, our identification strategy relies on the assumption that non-winning bidders bid their true values in the English auction. While this is theoretically valid under a continuous ascending auction format, the actual MEV-Boost auction has discrete bids and a fixed time window, which may introduce deviations from this assumption. However, the open format where all bid amounts are observable allows builders to react to competing bids, making truthful bidding approximately optimal. The fact that we observe systematic patterns in the data (e.g., differential responses to price volatility by builder type) that align with theoretical predictions suggests that the truthful bidding assumption is approximately valid. Future work could incorporate the timing of bids or use alternative identification strategies (e.g., bounds-based methods as in \cite{haile2003inference}) to address this concern more formally.
+
+\subsection{Counterfactual Analysis}
+
+Now that we have our fitted structural model, we can use it to examine counterfactual scenarios. The estimated distributions of builder values allow us to simulate outcomes under alternative auction formats or market structures.
+
+\subsubsection{First Price Auction}
+A natural counterfactual question is whether MEV-Boost would generate higher revenue under a sealed-bid first-price auction format rather than the current English auction. The theory of asymmetric auctions suggests that when bidders have asymmetric value distributions (as we find between integrated and non-integrated builders), first-price auctions may yield higher revenue than English auctions under certain conditions \citep{10.1111/1467-937X.00137, kirkegaard2012mechanism}. The key condition is that the ``strong'' bidders (those with stochastically higher value distributions) must be sufficiently advantaged relative to ``weak'' bidders. 
+
+To answer this question, we would need to solve for the equilibrium bidding strategies in a first-price auction with two types of bidders (integrated and non-integrated), where each type draws values from the distributions we have estimated. This requires solving a system of differential equations characterizing the first-order conditions for optimal bidding strategies. The equilibrium strategies depend on the estimated value distributions and the number of bidders of each type. Once these strategies are computed, we can simulate expected revenue under the first-price format and compare it to the current English auction revenue. This analysis is planned for future work. 
+
+\subsubsection{Value of Entry}
+Given the current oligopoly in the builder market (three builders---Titan, Rsync, and Beaverbuild---win over 75\% of blocks in MEV-Boost), there have been calls for new competitive builders to enter the builder market. Recent empirical work has documented how advantages in network latency and access to MEV opportunities contribute to this oligopolistic structure \citep{wu2024centralization}. A natural question is: what is the effect on auction revenue if a new integrated builder enters the market versus a non-integrated builder? We assume that the new builder draws a value from the estimated distribution of that type, maintaining the same value distribution as existing builders of the same type.
+
+Using our estimated value distributions, we can simulate the expected revenue impact of entry by drawing values for the new entrant from the appropriate type-specific distribution and computing the new equilibrium outcome. This analysis can inform discussions about whether policies to encourage entry (e.g., through subsidies or technical support) would meaningfully increase competition and proposer revenue. 
+
+\section*{Acknowledgements}
+We thank Kenneth Ng, Fahad Saleh, and Danning Sui for encouragement and helpful discussions, and several organizations for help with getting and understanding the data including SCP, Titan Builder, Flashbots, and Ultrasound Relay. We gratefully acknowledge financial support from the Uniswap Foundation and CBER. We also thank participants at multiple conferences, including the CBER Forum Conference and the CBER Crafting the Cryptoeconomy conference for helpful comments and suggestions. All remaining errors are our own.
+
+\newpage
+
+% Bibliography
+\bibliographystyle{econometrica}
+\bibliography{references}
+
+\appendix
+
+\section{Quick Primer on Blockchain Terminology}
+\label{app:primer}
+
+This primer provides essential background on blockchain technology for readers unfamiliar with the Ethereum ecosystem. Understanding these concepts is helpful but not strictly necessary for following the main economic analysis.
+
+\subsection{Basic Concepts}
+
+\textbf{Transaction:} A transaction is a request to transfer cryptocurrency from one address to another, or to execute a smart contract (a program stored on the blockchain). Each transaction specifies a sender, recipient, amount (if applicable), and any data needed for execution (including a signature authorizing the transaction).
+
+\textbf{Mempool:} The mempool (memory pool) is a collection of pending transactions that have been submitted to the network but not yet included in a block. Transactions remain in the mempool until they are selected by a proposer for inclusion in a block, or until they expire.
+
+\textbf{Block:} A block is a batch of transactions that are processed together and added to the blockchain. On Ethereum, a new block is created approximately every 12 seconds (this timing is fixed by the protocol). Each block contains a header (with metadata) and a body (with the list of transactions).
+
+\textbf{Blockchain:} The blockchain is a distributed ledger---a continuously growing list of blocks, each containing a cryptographic hash of the previous block, creating an immutable chain. All nodes in the network maintain a copy of the blockchain and validate new blocks.
+
+\textbf{On-chain vs. Off-chain:} Activities that occur on the blockchain itself (e.g., executing a smart contract, transferring tokens) are said to be ``on-chain.'' Activities that occur outside the blockchain (e.g., trading on centralized exchanges like Binance, private communication between parties) are ``off-chain.''
+
+\subsection{Ethereum-Specific Concepts}
+
+\textbf{Validator and Proposer:} In Ethereum's Proof-of-Stake system, validators are nodes that stake ETH to participate in securing the network. Validators are randomly selected to propose blocks; when selected, a validator is called a ``proposer.'' Validators also vote on the validity of blocks proposed by others.
+
+\textbf{Gas and Gas Price:} Gas is the unit of computational work on Ethereum. Every operation (transferring tokens, executing a smart contract, etc.) consumes a certain amount of gas. Users pay for gas using ETH, and the price per unit of gas (measured in Gwei, where 1 Gwei = $10^{-9}$ ETH) is determined by supply and demand. During periods of high network congestion, gas prices rise as users compete to have their transactions processed.
+
+\textbf{Base Fee and Tips:} Ethereum uses a fee structure with two components: (i) a base fee that is burned (removed from circulation) and adjusts automatically based on network congestion, and (ii) tips (also called priority fees) that users can add to incentivize proposers to include their transactions. Tips accrue to the proposer of the block.
+
+\textbf{Smart Contracts:} Smart contracts are programs stored on the blockchain that execute certain code when invoked by a transaction. They enable decentralized applications (dApps), including decentralized exchanges (DEXs) like Uniswap, which allow users to trade tokens without a centralized intermediary.
+
+\subsection{MEV and Block Building}
+
+\textbf{MEV (Maximal Extractable Value):} MEV refers to the additional value that can be extracted by strategically reordering or including specific transactions in a block. This value comes from arbitrage opportunities, front-running user transactions, and other strategies that exploit the ability to control transaction ordering.
+
+\textbf{Builder:} A builder is a specialized entity that assembles transactions into candidate blocks. Builders compete in the MEV-Boost auction to have their block selected by a proposer. Builders differ in their capabilities: some have access to private order flow, others specialize in different types of MEV extraction.
+
+\textbf{Proposer-Builder Separation (PBS):} PBS is a design pattern that separates the role of block proposal (choosing which block to add to the chain) from block construction (assembling transactions into a block). MEV-Boost is a particular instantiation of PBS that operates off-chain through relays.
+
+\textbf{Relay:} A relay is a trusted intermediary in the MEV-Boost system that facilitates communication between builders and proposers. Relays aggregate bids from builders and present them to proposers, while ensuring that block contents remain private until after selection and that payments are properly verified.
+
+\subsection{Key Distinctions}
+
+\textbf{Centralized Exchange (CEX) vs. Decentralized Exchange (DEX):} A CEX (e.g., Binance, Coinbase) is a traditional exchange where a company operates a trading platform and users trade through the company's order book. A DEX (e.g., Uniswap) is a smart contract on the blockchain that allows users to trade directly with each other without an intermediary. DEX prices update only when transactions are executed on-chain, while CEX prices update continuously in real-time, creating potential arbitrage opportunities.
+
+\textbf{Integrated vs. Non-Integrated Builders:} Integrated builders are entities that combine block building with high-frequency trading operations, allowing them to capture CEX/DEX arbitrage opportunities directly. Non-integrated builders focus primarily on ordering transactions provided by others (e.g., searchers who identify MEV opportunities).
+
+\section{Data Description and Code Availability}
+\label{app:data}
+
+This appendix describes the data used in our analysis and provides information on code availability.
+
+\subsection{Data Description}
+
+Our dataset consists of approximately 95,000 MEV-Boost auctions sampled from selected days between October and December 2024. The data is stored in a CSV file with the following key columns:
+
+\textbf{Auction Identifiers:}
+\begin{itemize}
+\item \texttt{slot}: Ethereum slot number
+\item \texttt{block\_number}: Ethereum block number
+\item \texttt{winning\_bid\_hash}: Hash of the winning bid
+\item \texttt{block\_timestamp}: Timestamp of the block
+\end{itemize}
+
+\textbf{Bid Data:}
+\begin{itemize}
+\item \texttt{winning\_bid\_amount}: Winning bid amount (in Wei, converted to ETH in analysis)
+\item \texttt{winning\_bid\_builder}: Name of the winning builder
+\item \texttt{BeaverBuild\_highest\_bid}, \texttt{RSync Builder\_highest\_bid}: Highest bids from integrated builders
+\item \texttt{Titan\_highest\_bid}, \texttt{Flashbots\_highest\_bid}: Highest bids from neutral builders
+\item Additional columns for other builders' bids
+\end{itemize}
+
+\textbf{Market Data:}
+\begin{itemize}
+\item \texttt{base\_fee\_per\_gas}: Base fee per gas in Wei (converted to Gwei in analysis)
+\item \texttt{cex\_start\_midpoint}, \texttt{cex\_end\_midpoint}: CEX price midpoints at start and end of 12-second slot
+\item \texttt{cex\_percent\_change}: Percentage change in CEX price
+\item \texttt{number\_of\_mempool\_txs}: Number of transactions in mempool
+\item \texttt{number\_of\_mempool\_txs\_over\_base\_fee}: Number of transactions paying above base fee
+\end{itemize}
+
+\textbf{Derived Variables:}
+\begin{itemize}
+\item \texttt{bps\_abs\_price\_change}: Absolute price change in basis points (used as $X_1$)
+\item \texttt{base\_fee\_gwei}: Base fee in Gwei (used as $X_2$)
+\item \texttt{2nd\_highest\_bid\_type\_1\_log}: Log of second-highest bid from integrated builders
+\item \texttt{2nd\_highest\_bid\_type\_2\_log}: Log of second-highest bid from neutral builders
+\end{itemize}
+
+The data construction process involves aggregating bids across multiple relays, identifying the winning bid by matching block hashes, and computing order statistics (second-highest bids) for each builder type within each auction.
+
+\subsection{Code Availability}
+
+The code for replicating our analysis is available on GitHub at \url{https://github.com/malleshpai/Structural-Estimation-of-MEV-Boost}.
+
+The repository contains:
+\begin{itemize}
+\item \texttt{analysis.py}: Main estimation code implementing the two-stage non-linear least squares procedure
+\item \texttt{README.md}: Documentation and usage instructions
+\item \texttt{paper.tex}: LaTeX source for this paper
+\end{itemize}
+
+The dataset is too large for GitHub and is available from the authors upon request. The code is well-documented with function docstrings explaining each step of the estimation procedure, following the methodology described in Section 2 of this paper.
+
+\end{document}
