@@ -25,6 +25,9 @@ ENV/
 *.toc
 *.pdf
 
+# Reference papers (PDFs too large for git)
+reference_papers/
+
 # IDE
 .vscode/
 .idea/
