@@ -263,59 +263,50 @@ Results from the non-linear least squares estimator and associated 95\% confiden
 
 The estimates reveal economically sensible patterns. For integrated builders, the coefficient on price volatility ($\hat{\mu}_1 = 0.0646$) is larger than for non-integrated builders ($\hat{\mu}_1 = 0.0402$), which aligns with our expectation that integrated builders derive more value from CEX/DEX arbitrage opportunities that arise from price movements. Both types show positive sensitivity to gas prices ($\hat{\mu}_2 = 0.0143$ for integrated and $\hat{\mu}_2 = 0.0160$ for non-integrated), suggesting that network congestion affects all builders through similar channels. The exponential functional forms capture non-linear relationships between observables and builder values. The model achieves an overall R² of 0.1094 for integrated builders and 0.0485 for non-integrated builders, indicating reasonable fit to the data.
 
-\begin{table}[t]
+\begin{table*}[t]
 \centering
-\caption{Preliminary estimation results by builder type}
+\caption{Estimation Results by Builder Type}
 \label{tab:prelim_estimation_results}
 
 \small
-\setlength{\tabcolsep}{7pt}
-\renewcommand{\arraystretch}{1.15}
+\setlength{\tabcolsep}{10pt}
+\renewcommand{\arraystretch}{1.2}
 
-\begin{tabular}{llcc}
+\begin{tabular}{@{}llcc@{}}
 \hline\hline
  &  & \multicolumn{1}{c}{Integrated} & \multicolumn{1}{c}{Non-Integrated} \\
 \cline{3-4}
-\textbf{Parameter} & \textbf{Regressor} & \multicolumn{1}{c}{\textbf{Estimate}} & \multicolumn{1}{c}{\textbf{Estimate}} \\
- &  & \multicolumn{1}{c}{\textbf{(95\% CI)}} & \multicolumn{1}{c}{\textbf{(95\% CI)}} \\
+\textbf{Parameter} & \textbf{Regressor} & \multicolumn{1}{c}{\textbf{Estimate (95\% CI)}} & \multicolumn{1}{c}{\textbf{Estimate (95\% CI)}} \\
 \hline
 
 \multicolumn{4}{l}{\textit{Panel A: Level} \quad $\mu(X)=\mu_1 X_1+\mu_2 X_2+\mu_3$} \\
 \hline
-$\mu_1$ & $X_1$     & 0.0646 & 0.0402 \\
-        &           & (0.062,\;0.067) & (0.035,\;0.040) \\
-$\mu_2$ & $X_2$     & 0.0143 & 0.0160 \\
-        &           & (0.014,\;0.015) & (0.014,\;0.016) \\
-$\mu_3$ & Constant  & -3.4444 & -3.8956 \\
-        &           & (-3.460,\;-3.428) & (-3.865,\;-3.833) \\
+$\mu_1$ & Abs. Price Change (bps)  & 0.0646 \quad (0.062,\;0.067) & 0.0402 \quad (0.035,\;0.040) \\
+$\mu_2$ & Gas Price (Gwei)         & 0.0143 \quad (0.014,\;0.015) & 0.0160 \quad (0.014,\;0.016) \\
+$\mu_3$ & Constant                 & -3.4444 \quad (-3.460,\;-3.428) & -3.8956 \quad (-3.865,\;-3.833) \\
 \hline
 
 \multicolumn{4}{l}{\textit{Panel B: Idiosyncratic scale} \quad $\omega(X)=\exp\{\omega_1 X_1+\omega_2 X_2+\omega_3\}$} \\
 \hline
-$\omega_1$ & $X_1$   & -0.0120 & 0.0357 \\
-           &         & (-0.024,\;0.001) & (-0.034,\;0.008) \\
-$\omega_2$ & $X_2$   & -0.3913 & -0.9673 \\
-           &         & (-0.426,\;-0.347) & (-0.648,\;-0.409) \\
-$\omega_3$ & Constant& 0.4734 & 0.7140 \\
-           &         & (0.325,\;0.585) & (0.068,\;0.814) \\
+$\omega_1$ & Abs. Price Change (bps) & -0.0120 \quad (-0.024,\;0.001) & 0.0357 \quad (-0.034,\;0.008) \\
+$\omega_2$ & Gas Price (Gwei)        & -0.3913 \quad (-0.426,\;-0.347) & -0.9673 \quad (-0.648,\;-0.409) \\
+$\omega_3$ & Constant                & 0.4734 \quad (0.325,\;0.585) & 0.7140 \quad (0.068,\;0.814) \\
 \hline
 
 \multicolumn{4}{l}{\textit{Panel C: Common-shock volatility} \quad $\sigma(X)=\exp\{\sigma_1 X_1+\sigma_2 X_2+\sigma_3\}$} \\
 \hline
-$\sigma_1$ & $X_1$   & 0.0311 & 0.0197 \\
-           &         & (0.028,\;0.034) & (0.014,\;0.018) \\
-$\sigma_2$ & $X_2$   & 0.0048 & -0.0236 \\
-           &         & (0.002,\;0.006) & (-0.004,\;0.003) \\
-$\sigma_3$ & Constant& -0.9652 & -0.1481 \\
-           &         & (-1.009,\;-0.915) & (-0.553,\;-0.453) \\
+$\sigma_1$ & Abs. Price Change (bps) & 0.0311 \quad (0.028,\;0.034) & 0.0197 \quad (0.014,\;0.018) \\
+$\sigma_2$ & Gas Price (Gwei)        & 0.0048 \quad (0.002,\;0.006) & -0.0236 \quad (-0.004,\;0.003) \\
+$\sigma_3$ & Constant                & -0.9652 \quad (-1.009,\;-0.915) & -0.1481 \quad (-0.553,\;-0.453) \\
 \hline\hline
 \end{tabular}
 
-\vspace{4pt}
-\parbox{0.93\linewidth}{\footnotesize\emph{Notes:} Entries report point estimates with 95\% confidence intervals.
-$X_1$ is the absolute ETH--USD price change over the prior 12 seconds; $X_2$ is the block gas price (Gwei).}
+\vspace{6pt}
+\parbox{\linewidth}{\footnotesize\emph{Notes:} Entries report point estimates with 95\% bootstrap confidence intervals (1,000 replications).
+``Abs.\ Price Change (bps)'' is the absolute ETH--USD price change on Binance over the prior 12-second slot, measured in basis points (1 bps = 0.01\%).
+``Gas Price (Gwei)'' is the base fee per gas of the block, where 1 Gwei = $10^{-9}$ ETH.}
 
-\end{table}
+\end{table*}
 
 \subsection{Interpretation of Regression Results}
 

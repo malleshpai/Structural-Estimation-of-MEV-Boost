@@ -11,7 +11,7 @@ This project implements a structural econometric model to estimate the distribut
 ### Requirements
 
 ```bash
-pip install numpy pandas scipy tqdm
+pip install -r requirements.txt
 ```
 
 ### Running the Estimation
