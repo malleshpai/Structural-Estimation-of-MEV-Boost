@@ -30,7 +30,7 @@ On the Ethereum blockchain, a randomly selected validator announces a block to a
 
 While this data is publicly available, and the auction is clearly substantial economically, to our knowledge it has not been analyzed using formal tools from econometrics in the academic literature. We describe the market structure of this auction, assemble the auction data from a variety of sources, and are the first to formally analyze the auction using tools from the structural empirical auctions literature developed over the past two decades. We empirically estimate the distribution of bidders' values in this auction using these techniques. 
 
-Our estimates reveal substantial differences between two types of bidders: integrated builders (affiliated with high-frequency trading firms) and non-integrated builders (without trading arms). We find that integrated builders have systematically higher values and are more responsive to price volatility, with a 1-unit increase in absolute price change (measured in basis points) increasing the expected log value component by approximately 6.5\% for integrated builders versus 4.0\% for non-integrated builders. The model achieves an overall R² of 0.11 for integrated builders and 0.05 for non-integrated builders, indicating reasonable fit to the data. These estimates enable counterfactual analysis of alternative auction formats. For example, the theory of asymmetric auctions suggests that when some bidders are `strong' relative to others, first-price sealed-bid auctions may generate a higher revenue than open auctions. 
+Our estimates reveal substantial differences between two types of bidders: integrated builders (affiliated with high-frequency trading firms) and non-integrated builders (without trading arms). We find that integrated builders have systematically higher values and are more responsive to price volatility, with a 1-unit increase in absolute price change (measured in basis points) increasing the expected log value component by approximately 6.5\% for integrated builders versus 4.0\% for non-integrated builders. These estimates enable counterfactual analysis of alternative auction formats. For example, the theory of asymmetric auctions suggests that when some bidders are `strong' relative to others, first-price sealed-bid auctions may generate a higher revenue than open auctions. 
 
 \vspace{1em}
 \noindent \textsc{Keywords:} Structural Estimation, Auctions, Blockchain, MEV
@@ -462,7 +462,7 @@ Our dataset consists of approximately 95,000 MEV-Boost auctions sampled from sel
 \item \texttt{winning\_bid\_amount}: Winning bid amount (in Wei, converted to ETH in analysis)
 \item \texttt{winning\_bid\_builder}: Name of the winning builder
 \item \texttt{BeaverBuild\_highest\_bid}, \texttt{RSync Builder\_highest\_bid}: Highest bids from integrated builders
-\item \texttt{Titan\_highest\_bid}, \texttt{Flashbots\_highest\_bid}: Highest bids from neutral builders
+\item \texttt{Titan\_highest\_bid}, \texttt{Flashbots\_highest\_bid}: Highest bids from non-integrated builders
 \item Additional columns for other builders' bids
 \end{itemize}
 
@@ -480,7 +480,7 @@ Our dataset consists of approximately 95,000 MEV-Boost auctions sampled from sel
 \item \texttt{bps\_abs\_price\_change}: Absolute price change in basis points (used as $X_1$)
 \item \texttt{base\_fee\_gwei}: Base fee in Gwei (used as $X_2$)
 \item \texttt{2nd\_highest\_bid\_type\_1\_log}: Log of second-highest bid from integrated builders
-\item \texttt{2nd\_highest\_bid\_type\_2\_log}: Log of second-highest bid from neutral builders
+\item \texttt{2nd\_highest\_bid\_type\_2\_log}: Log of second-highest bid from non-integrated builders
 \end{itemize}
 
 The data construction process involves aggregating bids across multiple relays, identifying the winning bid by matching block hashes, and computing order statistics for each builder type within each auction.
