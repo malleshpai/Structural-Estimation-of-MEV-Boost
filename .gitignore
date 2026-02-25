@@ -24,6 +24,8 @@ ENV/
 *.synctex.gz
 *.toc
 *.pdf
+response_letter*.tex
+paper_diff_revision*
 
 # Reference papers (PDFs too large for git)
 reference_papers/
@@ -41,4 +43,3 @@ Thumbs.db
 
 # Jupyter
 .ipynb_checkpoints/
-
