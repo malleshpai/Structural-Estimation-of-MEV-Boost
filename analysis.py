@@ -50,10 +50,11 @@ np.seterr(all='ignore')
 # REPLICATION SETTINGS
 # ============================================================================
 
-DATA_PATH = os.environ.get("MEVBOOST_DATA", "aggregated_bids_with_volatility_and_mempool.csv")
+DATA_PATH = os.environ.get("MEVBOOST_DATA", "aggregated_bids_with_volatility_and_mempool.csv.gz")
 SEED = 20240901            # Seed for bootstrap resampling and multi-start draws
 N_BOOTSTRAP = 1000         # Number of bootstrap replications
 EXAMPLE_BLOCK = 20915921   # Block used for the worked example in the paper
+N_STARTS = 20             # Random starting values for the full-sample Stage 1 fit
 BOOTSTRAP_DRAWS_PATH = "bootstrap_draws.csv"
 
 # ============================================================================
@@ -208,8 +209,9 @@ def optimization_function_Z(mu_and_omega, data, explanatory_variables,
     mu = mu_and_omega[:len(explanatory_variables)]
     omega = mu_and_omega[len(explanatory_variables):]
     Z_sum = np.sum(calculate_Z(data, mu, omega, explanatory_variables, 
-                               expected_second_highest_draw_values, t))
-    return Z_sum
+                               expected_second_highest_draw_values, t).to_numpy())
+    # Overflow gives NaN residuals; treat these as infinitely bad rather than zero
+    return Z_sum if np.isfinite(Z_sum) else np.inf
 
 def calculate_p_bar_and_omega_bar(data, mu, omega, explanatory_variables, 
                                   expected_second_highest_draw_values, t):
@@ -278,7 +280,9 @@ def optimization_function_Y(sigma, data, explanatory_variables,
     """
     Y_values = calculate_Y_b_t(data, sigma, explanatory_variables, 
                              variance_second_highest_draw_values, t)
-    return Y_values.sum()
+    Y_sum = np.sum(Y_values.to_numpy())
+    # Overflow gives NaN residuals; treat these as infinitely bad rather than zero
+    return Y_sum if np.isfinite(Y_sum) else np.inf
 
 # ============================================================================
 # MODEL FIT STATISTICS
@@ -446,33 +450,27 @@ def bootstrap_iteration(args):
         initial_guess_sigma=initial_guess_sigma
     )
 
-def multistart_check(data, explanatory_variables, reported, n_starts=20):
+def best_stage1_start(data, explanatory_variables, default_start, t, n_starts=N_STARTS):
     """
-    Re-run Stage 1 from random starting values and compare the best objective
-    found with the objective at the reported estimates.
+    Run Stage 1 from the default start and from random starting values, and
+    return the solution with the lowest objective. The Stage 1 objective is
+    nearly flat where ω_t(X) is close to zero, so a single start can stall.
     """
-    rng = np.random.default_rng(SEED)
-    print("\n" + "="*80)
-    print("                 MULTI-START CHECK (STAGE 1)")
-    print("="*80)
-    for t, label in [(1, "INTEGRATED"), (2, "NEUTRAL")]:
-        reported_params = np.concatenate([reported[f"mu_{t}"], reported[f"omega_{t}"]])
-        reported_obj = optimization_function_Z(reported_params, data, explanatory_variables,
-                                               expected_second_highest_draw_values, t)
-        fits = []
-        for _ in range(n_starts):
-            x0 = np.concatenate([rng.normal(0, 0.1, 2), [rng.uniform(-5, -2)],
-                                 rng.normal(0, 0.5, 2), [rng.uniform(-3, 1)]])
-            fits.append(minimize(optimization_function_Z, x0,
-                                 args=(data, explanatory_variables,
-                                       expected_second_highest_draw_values, t),
-                                 method='L-BFGS-B', options={'maxiter': 5000}))
-        best = min(fits, key=lambda f: f.fun)
-        print(f"\n{label} BUILDERS (Type {t}):")
-        print(f"   Objective at reported estimates: {reported_obj:.6f}")
-        print(f"   Best objective over {n_starts} starts: {best.fun:.6f}")
-        print(f"   Best parameters [μ₁, μ₂, μ₃, ω₁, ω₂, ω₃]: {[f'{x:.4f}' for x in best.x]}")
-        print(f"   Converged starts: {sum(f.success for f in fits)}/{n_starts}")
+    rng = np.random.default_rng(SEED + t)
+    starts = [np.array(default_start, dtype=float)] + [
+        np.concatenate([rng.normal(0, 0.1, 2), [rng.uniform(-5, -2)],
+                        rng.normal(0, 0.5, 2), [rng.uniform(-3, 1)]])
+        for _ in range(n_starts)
+    ]
+    fits = [minimize(optimization_function_Z, x0,
+                     args=(data, explanatory_variables, expected_second_highest_draw_values, t),
+                     method='L-BFGS-B', options={'maxiter': 5000})
+            for x0 in starts]
+    best = min(fits, key=lambda f: f.fun)
+    n_at_best = sum(f.fun < best.fun + 1e-3 * abs(best.fun) for f in fits)
+    print(f"   Type {t}: objective from default start {fits[0].fun:.4f}; "
+          f"best over {len(fits)} starts {best.fun:.4f} (reached by {n_at_best} starts)")
+    return list(best.x)
 
 def calculate_confidence_interval(values, confidence_level=0.95):
     """
@@ -540,9 +538,24 @@ if __name__ == '__main__':
         print(f"Explanatory variables: {explanatory_variables}")
         print(f"Starting optimization...")
         
-        # Run primary estimation
-        results = primary_analysis(data, explanatory_variables, initial_guess, initial_guess_sigma,
-                                   return_diagnostics=True)
+        # Run primary estimation, choosing the Stage 1 start with the lowest objective for each type
+        print(f"\nMulti-start search for Stage 1 ({N_STARTS} random starts plus the default):")
+        best_start_1 = best_stage1_start(data, explanatory_variables, initial_guess, 1)
+        best_start_2 = best_stage1_start(data, explanatory_variables, initial_guess, 2)
+        results_1 = primary_analysis(data, explanatory_variables, best_start_1, initial_guess_sigma,
+                                     return_diagnostics=True)
+        results_2 = primary_analysis(data, explanatory_variables, best_start_2, initial_guess_sigma,
+                                     return_diagnostics=True)
+        results = {
+            "mu_1": results_1["mu_1"], "omega_1": results_1["omega_1"], "sigma_1": results_1["sigma_1"],
+            "mu_2": results_2["mu_2"], "omega_2": results_2["omega_2"], "sigma_2": results_2["sigma_2"],
+            "diagnostics": {
+                "Stage 1, integrated": results_1["diagnostics"]["Stage 1, integrated"],
+                "Stage 2, integrated": results_1["diagnostics"]["Stage 2, integrated"],
+                "Stage 1, neutral": results_2["diagnostics"]["Stage 1, neutral"],
+                "Stage 2, neutral": results_2["diagnostics"]["Stage 2, neutral"],
+            },
+        }
         
         mu_integrated = results["mu_1"]
         omega_integrated = results["omega_1"]
@@ -569,9 +582,6 @@ if __name__ == '__main__':
         for step, d in results["diagnostics"].items():
             print(f"   {step}: success={d['success']}, objective={d['objective']:.6f}, "
                   f"iterations={d['iterations']}, message={d['message']}")
-        
-        if "--multistart" in sys.argv:
-            multistart_check(data, explanatory_variables, results)
         
         # Calculate R-squared for both types
         print("\n" + "="*80)
