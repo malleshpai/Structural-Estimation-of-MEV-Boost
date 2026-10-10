@@ -16,21 +16,41 @@
 }
 
 
+% Footnote addresses keyed by author symbols rather than surnames
+\makeatletter
+\def\@setfoot@addresses{%
+  \def\author##1{}%
+  \def\\{\unskip, \ignorespaces}%
+  \newif\if@firstaddr
+  \@firstaddrtrue
+  \def\address##1##2{%
+    \if@firstaddr\@firstaddrfalse\else\par\fi
+    \@ifnotempty{##1}{\ignorespaces##1\,}%
+    \ignorespaces##2%
+  }%
+  \def\email##1##2{}%
+  \def\curraddr##1##2{}%
+  \def\urladdr##1##2{}%
+  \addresses
+}
+\makeatother
+
+\newcommand{\acknowledgementtext}{We thank the editors, Jeremy Fox and Yan Chen, for editing the paper, and the anonymous referees for helpful suggestions. We thank Kenneth Ng, Fahad Saleh, Ciamac Moallemi, and Danning Sui for encouragement and helpful discussions, and several organizations for help with getting and understanding the data, including SCP, Titan Builder, Flashbots, and Ultrasound Relay. We also thank audiences at the CBER Forum, the CBER Crafting the Cryptoeconomy conference, the Columbia CryptoEconomics Workshop, and the UCSB Blockchain Summit for helpful comments. This work was funded by the Uniswap Foundation, and we also gratefully acknowledge support from CBER. All remaining errors are our own.}
+
 \begin{document}
 \raggedbottom
 \setlength{\emergencystretch}{2em}
 \title{Structural Estimation of MEV-Boost Auctions}
-\author[Gupta]{Tivas Gupta}
-\address[Gupta]{Consensys Inc.}
-\author[Pai]{Mallesh M. Pai}
-\address[Pai]{Tempo Labs}
-\email[Pai]{mallesh.pai@gmail.com}
-\author[Resnick]{Max Resnick}
-\address[Resnick]{Anza Labs}
-\author[Tang]{Xun Tang}
-\address[Tang]{Department of Economics, Rice University}
-\email[Tang]{xt9@rice.edu}
+\author[Gupta]{Tivas Gupta\textsuperscript{$\ast$}}
+\address[\textsuperscript{$\ast$}]{Consensys Inc., \texttt{tivas.gupta@consensys.net}}
+\author[Pai]{Mallesh M. Pai\textsuperscript{$\dagger$}}
+\address[\textsuperscript{$\dagger$}]{Tempo Labs, \texttt{mallesh.pai@gmail.com} (corresponding author)}
+\author[Resnick]{Max Resnick\textsuperscript{$\ddagger$}}
+\address[\textsuperscript{$\ddagger$}]{Anza Labs, \texttt{resnick.max@gmail.com}}
+\author[Tang]{Xun Tang\textsuperscript{$\S$}}
+\address[\textsuperscript{$\S$}]{Department of Economics, Rice University, \texttt{xt9@rice.edu}}
 \date{October 2026}
+\thanks{\acknowledgementtext}
 \begin{abstract}
 On the Ethereum blockchain, a randomly selected validator announces a block to advance the chain. Roughly 90\% of blocks are built through MEV-Boost, an open English auction where proposers sell their block-building rights in real time. Hundreds of thousands of these auctions are held every month, and revenues since inception in September 2022 total over 700k ETH ($\sim$ 2.1 Billion USD at roughly \$3,000 per ETH).
 
@@ -391,7 +411,7 @@ Given the current oligopoly in the builder market (three builders---Titan, Rsync
 Using our estimated value distributions, we can simulate the expected revenue impact of entry by drawing values for the new entrant from the appropriate type-specific distribution and computing the new equilibrium outcome. This analysis can inform discussions about whether policies to encourage entry (e.g., through subsidies or technical support) would meaningfully increase competition and proposer revenue. 
 
 \section*{Acknowledgements}
-We thank Kenneth Ng, Fahad Saleh, and Danning Sui for encouragement and helpful discussions, and several organizations for help with getting and understanding the data including SCP, Titan Builder, Flashbots, and Ultrasound Relay. We gratefully acknowledge financial support from the Uniswap Foundation and CBER. We also thank participants at multiple conferences, including the CBER Forum Conference and the CBER Crafting the Cryptoeconomy conference for helpful comments and suggestions. All remaining errors are our own.
+\acknowledgementtext
 
 \newpage
 
