@@ -12,7 +12,7 @@ The model decomposes builder values into:
 Where:
 - μ_t(X) = μ_{t,1} X_1 + μ_{t,2} X_2 + μ_{t,3} (linear in log space)
 - ω_t(X) = exp{ω_{t,1} X_1 + ω_{t,2} X_2 + ω_{t,3}}
-- σ_t(X) = exp{σ_{t,1} X_1 + σ_{t,2} X_2 + σ_{t,3}}
+- σ_t²(X) = exp{σ_{t,1} X_1 + σ_{t,2} X_2 + σ_{t,3}}
 
 X_1: Absolute ETH-USD price change (in basis points)
 X_2: Base fee per gas (in Gwei)
@@ -31,6 +31,8 @@ import multiprocessing
 import warnings
 import sys
 import os
+import hashlib
+import importlib.metadata
 
 # Suppress optimization warnings that are not critical
 # Set up comprehensive warning filters before any operations
@@ -45,11 +47,23 @@ warnings.filterwarnings('ignore', message='.*resource_tracker.*')
 np.seterr(all='ignore')
 
 # ============================================================================
+# REPLICATION SETTINGS
+# ============================================================================
+
+DATA_PATH = os.environ.get("MEVBOOST_DATA", "aggregated_bids_with_volatility_and_mempool.csv.gz")
+SEED = 20240901            # Seed for bootstrap resampling and multi-start draws
+N_BOOTSTRAP = 1000         # Number of bootstrap replications
+EXAMPLE_BLOCK = 20915921   # Block used for the worked example in the paper
+N_STARTS = 20             # Random starting values for the full-sample Stage 1 fit
+BOOTSTRAP_DRAWS_PATH = "bootstrap_draws.csv"
+
+# ============================================================================
 # DATA LOADING AND PREPROCESSING
 # ============================================================================
 
 print("Loading data...")
-data = pd.read_csv("aggregated_bids_with_volatility_and_mempool.csv")
+data = pd.read_csv(DATA_PATH)
+n_raw = len(data)
 
 # Convert winning bid amounts from Wei to ETH
 data['winning_bid_amount'] = pd.to_numeric(data['winning_bid_amount'], errors='coerce') / 10**18
@@ -195,8 +209,9 @@ def optimization_function_Z(mu_and_omega, data, explanatory_variables,
     mu = mu_and_omega[:len(explanatory_variables)]
     omega = mu_and_omega[len(explanatory_variables):]
     Z_sum = np.sum(calculate_Z(data, mu, omega, explanatory_variables, 
-                               expected_second_highest_draw_values, t))
-    return Z_sum
+                               expected_second_highest_draw_values, t).to_numpy())
+    # Overflow gives NaN residuals; treat these as infinitely bad rather than zero
+    return Z_sum if np.isfinite(Z_sum) else np.inf
 
 def calculate_p_bar_and_omega_bar(data, mu, omega, explanatory_variables, 
                                   expected_second_highest_draw_values, t):
@@ -265,7 +280,9 @@ def optimization_function_Y(sigma, data, explanatory_variables,
     """
     Y_values = calculate_Y_b_t(data, sigma, explanatory_variables, 
                              variance_second_highest_draw_values, t)
-    return Y_values.sum()
+    Y_sum = np.sum(Y_values.to_numpy())
+    # Overflow gives NaN residuals; treat these as infinitely bad rather than zero
+    return Y_sum if np.isfinite(Y_sum) else np.inf
 
 # ============================================================================
 # MODEL FIT STATISTICS
@@ -317,7 +334,8 @@ def calculate_r_squared(data, mu, omega, sigma, explanatory_variables,
 # MAIN ESTIMATION FUNCTION
 # ============================================================================
 
-def primary_analysis(data, explanatory_variables, initial_guess_mu_omega, initial_guess_sigma):
+def primary_analysis(data, explanatory_variables, initial_guess_mu_omega, initial_guess_sigma,
+                     return_diagnostics=False):
     """
     Perform two-stage estimation for both builder types.
     
@@ -326,6 +344,7 @@ def primary_analysis(data, explanatory_variables, initial_guess_mu_omega, initia
         explanatory_variables: List of variable names
         initial_guess_mu_omega: Initial guess for [μ, ω] parameters (6 values)
         initial_guess_sigma: Initial guess for σ parameters (3 values)
+        return_diagnostics: If True, also return optimizer status for each step
         
     Returns:
         Dictionary with estimated parameters for both types:
@@ -333,22 +352,24 @@ def primary_analysis(data, explanatory_variables, initial_guess_mu_omega, initia
         - mu_2, omega_2, sigma_2: Neutral builders (Type 2)
     """
     # Stage 1: Estimate μ and ω for integrated builders
-    first_stage_results_integrated = minimize(
+    first_stage_results_integrated_fit = minimize(
         optimization_function_Z, 
         initial_guess_mu_omega, 
         args=(data, explanatory_variables, expected_second_highest_draw_values, 1), 
         method='L-BFGS-B', 
         options={'maxiter': 5000}
-    ).x
+    )
+    first_stage_results_integrated = first_stage_results_integrated_fit.x
 
     # Stage 1: Estimate μ and ω for neutral builders
-    first_stage_results_neutral = minimize(
+    first_stage_results_neutral_fit = minimize(
         optimization_function_Z, 
         initial_guess_mu_omega, 
         args=(data, explanatory_variables, expected_second_highest_draw_values, 2), 
         method='L-BFGS-B', 
         options={'maxiter': 5000}
-    ).x
+    )
+    first_stage_results_neutral = first_stage_results_neutral_fit.x
 
     # Split the parameters into mu and omega
     mu_integrated = first_stage_results_integrated[:len(explanatory_variables)]
@@ -363,24 +384,26 @@ def primary_analysis(data, explanatory_variables, initial_guess_mu_omega, initia
                                   explanatory_variables, expected_second_highest_draw_values, 2)
 
     # Stage 2: Estimate σ for integrated builders
-    sigma_integrated = minimize(
+    sigma_integrated_fit = minimize(
         optimization_function_Y, 
         initial_guess_sigma, 
         args=(data, explanatory_variables, variance_second_highest_draw_values, 1), 
         method='L-BFGS-B', 
         options={'maxiter': 5000}
-    ).x
+    )
+    sigma_integrated = sigma_integrated_fit.x
     
     # Stage 2: Estimate σ for neutral builders
-    sigma_neutral = minimize(
+    sigma_neutral_fit = minimize(
         optimization_function_Y, 
         initial_guess_sigma, 
         args=(data, explanatory_variables, variance_second_highest_draw_values, 2), 
         method='L-BFGS-B', 
         options={'maxiter': 5000}
-    ).x
+    )
+    sigma_neutral = sigma_neutral_fit.x
     
-    return {
+    results = {
         "mu_1": mu_integrated,
         "omega_1": omega_integrated,
         "sigma_1": sigma_integrated,
@@ -388,6 +411,18 @@ def primary_analysis(data, explanatory_variables, initial_guess_mu_omega, initia
         "omega_2": omega_neutral,
         "sigma_2": sigma_neutral
     }
+    if return_diagnostics:
+        results["diagnostics"] = {
+            name: {"success": fit.success, "objective": fit.fun, "iterations": fit.nit,
+                   "message": str(fit.message)}
+            for name, fit in [
+                ("Stage 1, integrated", first_stage_results_integrated_fit),
+                ("Stage 1, neutral", first_stage_results_neutral_fit),
+                ("Stage 2, integrated", sigma_integrated_fit),
+                ("Stage 2, neutral", sigma_neutral_fit),
+            ]
+        }
+    return results
 
 # ============================================================================
 # BOOTSTRAP FOR CONFIDENCE INTERVALS
@@ -398,15 +433,15 @@ def bootstrap_iteration(args):
     Perform one bootstrap iteration.
     
     Args:
-        args: Tuple of (data, explanatory_variables, initial_guess_mu_omega, initial_guess_sigma)
+        args: Tuple of (data, explanatory_variables, initial_guess_mu_omega, initial_guess_sigma, seed)
         
     Returns:
         Dictionary of estimated parameters
     """
-    data, explanatory_variables, initial_guess_mu_omega, initial_guess_sigma = args
+    data, explanatory_variables, initial_guess_mu_omega, initial_guess_sigma, seed = args
     
     # Sample the data with replacement
-    bootstrap_sample = data.sample(n=len(data), replace=True)
+    bootstrap_sample = data.sample(n=len(data), replace=True, random_state=seed)
     
     return primary_analysis(
         data=bootstrap_sample, 
@@ -414,6 +449,28 @@ def bootstrap_iteration(args):
         initial_guess_mu_omega=initial_guess_mu_omega, 
         initial_guess_sigma=initial_guess_sigma
     )
+
+def best_stage1_start(data, explanatory_variables, default_start, t, n_starts=N_STARTS):
+    """
+    Run Stage 1 from the default start and from random starting values, and
+    return the solution with the lowest objective. The Stage 1 objective is
+    nearly flat where ω_t(X) is close to zero, so a single start can stall.
+    """
+    rng = np.random.default_rng(SEED + t)
+    starts = [np.array(default_start, dtype=float)] + [
+        np.concatenate([rng.normal(0, 0.1, 2), [rng.uniform(-5, -2)],
+                        rng.normal(0, 0.5, 2), [rng.uniform(-3, 1)]])
+        for _ in range(n_starts)
+    ]
+    fits = [minimize(optimization_function_Z, x0,
+                     args=(data, explanatory_variables, expected_second_highest_draw_values, t),
+                     method='L-BFGS-B', options={'maxiter': 5000})
+            for x0 in starts]
+    best = min(fits, key=lambda f: f.fun)
+    n_at_best = sum(f.fun < best.fun + 1e-3 * abs(best.fun) for f in fits)
+    print(f"   Type {t}: objective from default start {fits[0].fun:.4f}; "
+          f"best over {len(fits)} starts {best.fun:.4f} (reached by {n_at_best} starts)")
+    return list(best.x)
 
 def calculate_confidence_interval(values, confidence_level=0.95):
     """
@@ -467,12 +524,38 @@ if __name__ == '__main__':
         print("="*80)
         print("           AUCTION EMPIRICS: SECOND-HIGHEST BID ANALYSIS")
         print("="*80)
-        print(f"Dataset: {len(data):,} observations")
+        with open(DATA_PATH, "rb") as f:
+            data_sha256 = hashlib.sha256(f.read()).hexdigest()
+        sample_dates = sorted(pd.to_datetime(data["block_timestamp"], utc=True, errors="coerce")
+                              .dt.strftime("%Y-%m-%d").dropna().unique())
+        print(f"Data file: {DATA_PATH} (SHA-256 {data_sha256})")
+        print(f"Auctions in file: {n_raw:,}")
+        print(f"Dataset: {len(data):,} observations (all four builders submit a positive bid)")
+        print(f"Sample dates ({len(sample_dates)}): {', '.join(sample_dates)}")
+        print("Software versions: " + ", ".join(
+            f"{pkg} {importlib.metadata.version(pkg)}" for pkg in ["numpy", "pandas", "scipy", "tqdm"]))
+        print(f"Python {sys.version.split()[0]}; seed {SEED}; bootstrap replications {N_BOOTSTRAP}")
         print(f"Explanatory variables: {explanatory_variables}")
         print(f"Starting optimization...")
         
-        # Run primary estimation
-        results = primary_analysis(data, explanatory_variables, initial_guess, initial_guess_sigma)
+        # Run primary estimation, choosing the Stage 1 start with the lowest objective for each type
+        print(f"\nMulti-start search for Stage 1 ({N_STARTS} random starts plus the default):")
+        best_start_1 = best_stage1_start(data, explanatory_variables, initial_guess, 1)
+        best_start_2 = best_stage1_start(data, explanatory_variables, initial_guess, 2)
+        results_1 = primary_analysis(data, explanatory_variables, best_start_1, initial_guess_sigma,
+                                     return_diagnostics=True)
+        results_2 = primary_analysis(data, explanatory_variables, best_start_2, initial_guess_sigma,
+                                     return_diagnostics=True)
+        results = {
+            "mu_1": results_1["mu_1"], "omega_1": results_1["omega_1"], "sigma_1": results_1["sigma_1"],
+            "mu_2": results_2["mu_2"], "omega_2": results_2["omega_2"], "sigma_2": results_2["sigma_2"],
+            "diagnostics": {
+                "Stage 1, integrated": results_1["diagnostics"]["Stage 1, integrated"],
+                "Stage 2, integrated": results_1["diagnostics"]["Stage 2, integrated"],
+                "Stage 1, neutral": results_2["diagnostics"]["Stage 1, neutral"],
+                "Stage 2, neutral": results_2["diagnostics"]["Stage 2, neutral"],
+            },
+        }
         
         mu_integrated = results["mu_1"]
         omega_integrated = results["omega_1"]
@@ -494,6 +577,11 @@ if __name__ == '__main__':
         print(f"   μ parameters: {[f'{x:.4f}' for x in mu_neutral]}")
         print(f"   ω parameters: {[f'{x:.4f}' for x in omega_neutral]}")
         print(f"   σ parameters: {[f'{x:.4f}' for x in sigma_t_2]}")
+        
+        print(f"\nOPTIMIZER STATUS:")
+        for step, d in results["diagnostics"].items():
+            print(f"   {step}: success={d['success']}, objective={d['objective']:.6f}, "
+                  f"iterations={d['iterations']}, message={d['message']}")
         
         # Calculate R-squared for both types
         print("\n" + "="*80)
@@ -522,17 +610,19 @@ if __name__ == '__main__':
         
         print("="*80)
         
-        # Example calculation for a random auction
-        random_auction_instance = data.sample()
+        # Example calculation for the block used in the paper (or a seeded random block)
+        random_auction_instance = data[data["block_number"] == EXAMPLE_BLOCK]
+        if random_auction_instance.empty:
+            random_auction_instance = data.sample(random_state=SEED)
         
         print("\n" + "="*80)
-        print("                 RANDOM BLOCK DISTRIBUTION ANALYSIS")
+        print("                 EXAMPLE BLOCK DISTRIBUTION ANALYSIS")
         print("="*80)
         
         block_number = random_auction_instance["block_number"].iloc[0]
         slot = random_auction_instance["slot"].iloc[0]
         
-        print(f"\nRandom Block Details:")
+        print(f"\nExample Block Details:")
         print(f"   Block Number: {int(block_number):,}")
         print(f"   Slot: {int(slot):,}")
         
@@ -552,7 +642,7 @@ if __name__ == '__main__':
             + omega_integrated[1] * random_auction_instance["base_fee_gwei"].iloc[0] 
             + omega_integrated[2]
         )
-        sigma_integrated_block = np.exp(
+        sigma_sq_integrated_block = np.exp(
             sigma_t_1[0] * random_auction_instance["bps_abs_price_change"].iloc[0] 
             + sigma_t_1[1] * random_auction_instance["base_fee_gwei"].iloc[0] 
             + sigma_t_1[2]
@@ -566,7 +656,7 @@ if __name__ == '__main__':
             + omega_neutral[1] * random_auction_instance["base_fee_gwei"].iloc[0] 
             + omega_neutral[2]
         )
-        sigma_neutral_block = np.exp(
+        sigma_sq_neutral_block = np.exp(
             sigma_t_2[0] * random_auction_instance["bps_abs_price_change"].iloc[0] 
             + sigma_t_2[1] * random_auction_instance["base_fee_gwei"].iloc[0] 
             + sigma_t_2[2]
@@ -576,10 +666,10 @@ if __name__ == '__main__':
         print(f"\nINTEGRATED BUILDERS (Type 1) Distribution:")
         print(f"   Log-Normal Parameters:")
         print(f"     μ (location): {mu_integrated_block:.4f}")
-        print(f"     σ (scale):    {sigma_integrated_block:.4f}")
+        print(f"     σ² (variance of log): {sigma_sq_integrated_block:.4f}")
         print(f"   Distribution Statistics:")
-        mean_integrated = np.exp(mu_integrated_block + 0.5 * sigma_integrated_block**2)
-        var_integrated = (np.exp(sigma_integrated_block**2) - 1) * np.exp(2*mu_integrated_block + sigma_integrated_block**2)
+        mean_integrated = np.exp(mu_integrated_block + 0.5 * sigma_sq_integrated_block)
+        var_integrated = (np.exp(sigma_sq_integrated_block) - 1) * np.exp(2*mu_integrated_block + sigma_sq_integrated_block)
         std_integrated = np.sqrt(var_integrated)
         print(f"     Mean (ETH):   {mean_integrated:.6f}")
         print(f"     Std Dev:      {std_integrated:.6f}")
@@ -588,10 +678,10 @@ if __name__ == '__main__':
         print(f"\nNEUTRAL BUILDERS (Type 2) Distribution:")
         print(f"   Log-Normal Parameters:")
         print(f"     μ (location): {mu_neutral_block:.4f}")
-        print(f"     σ (scale):    {sigma_neutral_block:.4f}")
+        print(f"     σ² (variance of log): {sigma_sq_neutral_block:.4f}")
         print(f"   Distribution Statistics:")
-        mean_neutral = np.exp(mu_neutral_block + 0.5 * sigma_neutral_block**2)
-        var_neutral = (np.exp(sigma_neutral_block**2) - 1) * np.exp(2*mu_neutral_block + sigma_neutral_block**2)
+        mean_neutral = np.exp(mu_neutral_block + 0.5 * sigma_sq_neutral_block)
+        var_neutral = (np.exp(sigma_sq_neutral_block) - 1) * np.exp(2*mu_neutral_block + sigma_sq_neutral_block)
         std_neutral = np.sqrt(var_neutral)
         print(f"     Mean (ETH):   {mean_neutral:.6f}")
         print(f"     Std Dev:      {std_neutral:.6f}")
@@ -606,7 +696,7 @@ if __name__ == '__main__':
         
         # Bootstrap for confidence intervals
         print("\nRunning bootstrap for confidence intervals...")
-        n_iterations = 500  # Number of bootstrap replications
+        n_iterations = N_BOOTSTRAP
         
         # Use the actual parameter estimates as initial guesses for bootstrap
         initial_guess_mu_omega_1 = list(mu_integrated) + list(omega_integrated)
@@ -616,8 +706,8 @@ if __name__ == '__main__':
         
         # Prepare arguments for bootstrap iterations
         args_1 = [
-            (data, explanatory_variables, initial_guess_mu_omega_1, initial_guess_sigma_1) 
-            for _ in range(n_iterations)
+            (data, explanatory_variables, initial_guess_mu_omega_1, initial_guess_sigma_1, SEED + i) 
+            for i in range(n_iterations)
         ]
         
         print(f"   Running {n_iterations} bootstrap iterations for Integrated Builders (Type 1)...")
@@ -628,8 +718,8 @@ if __name__ == '__main__':
             ))
         
         args_2 = [
-            (data, explanatory_variables, initial_guess_mu_omega_2, initial_guess_sigma_2) 
-            for _ in range(n_iterations)
+            (data, explanatory_variables, initial_guess_mu_omega_2, initial_guess_sigma_2, SEED + n_iterations + i) 
+            for i in range(n_iterations)
         ]
         
         print(f"   Running {n_iterations} bootstrap iterations for Neutral Builders (Type 2)...")
@@ -646,6 +736,15 @@ if __name__ == '__main__':
         mu_2_values = [result['mu_2'] for result in bootstrap_results_2]
         omega_2_values = [result['omega_2'] for result in bootstrap_results_2]
         sigma_2_values = [result['sigma_2'] for result in bootstrap_results_2]
+
+        # Store bootstrap draws so the intervals can be recomputed without re-running
+        draw_columns = {}
+        for name, values in [("mu_1", mu_1_values), ("omega_1", omega_1_values), ("sigma_1", sigma_1_values),
+                             ("mu_2", mu_2_values), ("omega_2", omega_2_values), ("sigma_2", sigma_2_values)]:
+            for k in range(3):
+                draw_columns[f"{name}_{k+1}"] = [v[k] for v in values]
+        pd.DataFrame(draw_columns).to_csv(BOOTSTRAP_DRAWS_PATH, index_label="replication")
+        print(f"\nBootstrap draws saved to {BOOTSTRAP_DRAWS_PATH}")
 
         ci_mu_1 = calculate_vector_confidence_intervals(mu_1_values)
         ci_omega_1 = calculate_vector_confidence_intervals(omega_1_values)
