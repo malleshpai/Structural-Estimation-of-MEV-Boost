@@ -31,17 +31,21 @@ The script performs two-stage estimation for integrated and neutral builders, ca
 
 ## Data
 
-The dataset is included as `aggregated_bids_with_volatility_and_mempool.csv.gz` (gzip-compressed CSV, 22 MB). SHA-256 checksums: `5d0441d999838fa6a20166ccc043701193f5da99ca72de8c9b6e3148fcd938e4` for the `.gz` file (the value printed in the run log) and `0c3af446857cef284737e17779e399d334bcc4efc365c048e8ab3962bf0c66b8` for the uncompressed CSV. The file contains approximately 95,000 MEV-Boost auctions from selected days between October and December 2024, including bid data from major builders, CEX price movements, base fees, and mempool statistics. Estimation uses the 68,120 auctions in which Beaverbuild, rsync-builder, Titan, and Flashbots all submit a positive bid. The file is built from relay bid data, on-chain block data, the Flashbots mempool archive, and Tardis Binance ETH-USDC quotes, as described in Section 3 of the paper. 
+The dataset is included as `aggregated_bids_with_volatility_and_mempool.csv.gz` (gzip-compressed CSV, 22 MB). SHA-256 checksums: `5d0441d999838fa6a20166ccc043701193f5da99ca72de8c9b6e3148fcd938e4` for the `.gz` file (the value printed in the run log) and `0c3af446857cef284737e17779e399d334bcc4efc365c048e8ab3962bf0c66b8` for the uncompressed CSV. The file contains 95,301 MEV-Boost auctions from 16 dates between October and December 2024, including bid data from major builders, CEX price movements, base fees, and mempool statistics. Estimation uses the 68,120 auctions in which Beaverbuild, rsync-builder, Titan, and Flashbots all submit a positive bid. The file is built from relay bid data, on-chain block data, the Flashbots mempool archive, and Tardis Binance ETH-USDC quotes, as described in Section 3 of the paper. 
+
+### Sample dates (UTC)
+
+The full dataset covers October 6-7, November 1-7, and December 1-7, 2024 (16 dates). The 68,120-auction estimation sample covers the same dates except December 7 (15 dates). All 6,061 rows on December 7 have no recorded positive Flashbots bid and are excluded by the all-four-positive-bid filter. The run log lists the estimation-sample dates.
 
 ## Citation
 
 If you use this code, please cite:
 
 ```bibtex
-@article{gupta2025structural,
+@unpublished{gupta2026structural,
   title={Structural Estimation of MEV-Boost Auctions},
   author={Gupta, Tivas and Pai, Mallesh M. and Resnick, Max and Tang, Xun},
-  journal={Working Paper},
-  year={2025}
+  note={October 2026 manuscript; accepted at the Journal of Mechanism and Institution Design},
+  year={2026}
 }
 ```
